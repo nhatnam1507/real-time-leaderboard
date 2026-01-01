@@ -11,12 +11,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/config"
-	"real-time-leaderboard/internal/shared/database"
-	redisInfra "real-time-leaderboard/internal/shared/redis"
 	authHTTP "real-time-leaderboard/internal/module/auth/adapters/http"
 	authApp "real-time-leaderboard/internal/module/auth/application"
-	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
 	authJWT "real-time-leaderboard/internal/module/auth/infrastructure/jwt"
+	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
 	leaderboardHTTP "real-time-leaderboard/internal/module/leaderboard/adapters/http"
 	"real-time-leaderboard/internal/module/leaderboard/adapters/websocket"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
@@ -27,8 +25,10 @@ import (
 	scoreHTTP "real-time-leaderboard/internal/module/score/adapters/http"
 	scoreApp "real-time-leaderboard/internal/module/score/application"
 	scoreInfra "real-time-leaderboard/internal/module/score/infrastructure/repository"
+	"real-time-leaderboard/internal/shared/database"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
+	redisInfra "real-time-leaderboard/internal/shared/redis"
 )
 
 func main() {
@@ -178,4 +178,3 @@ func setupRouter(
 
 	return router
 }
-

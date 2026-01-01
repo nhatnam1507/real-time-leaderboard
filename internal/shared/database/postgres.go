@@ -19,7 +19,7 @@ type Postgres struct {
 // NewPostgres creates a new PostgreSQL connection pool
 func NewPostgres(cfg config.DatabaseConfig, l *logger.Logger) (*Postgres, error) {
 	dsn := cfg.GetDSN()
-	
+
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
@@ -64,4 +64,3 @@ func (p *Postgres) Close() {
 func (p *Postgres) Health(ctx context.Context) error {
 	return p.Pool.Ping(ctx)
 }
-

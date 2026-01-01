@@ -66,4 +66,3 @@ func (c *Client) Close() error {
 func (c *Client) Health(ctx context.Context) error {
 	return c.client.Ping(ctx).Err()
 }
-

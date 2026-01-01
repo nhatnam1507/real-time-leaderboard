@@ -16,4 +16,3 @@ type LeaderboardRepository interface {
 	UpdateScore(ctx context.Context, gameID string, userID string, score int64) error
 	UpdateGlobalScore(ctx context.Context, userID string, score int64) error
 }
-

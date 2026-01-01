@@ -42,4 +42,3 @@ func (r *RedisLeaderboardRepository) UpdateGlobalScore(ctx context.Context, user
 	}
 	return nil
 }
-

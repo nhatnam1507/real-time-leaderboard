@@ -92,4 +92,3 @@ func (m *JWTManager) ValidateToken(tokenString string) (string, error) {
 
 	return "", errors.New("invalid token")
 }
-

@@ -42,7 +42,7 @@ func SuccessWithStatus(c *gin.Context, status int, data interface{}, message str
 // Error sends an error response
 func Error(c *gin.Context, err error) {
 	appErr := errors.AsAppError(err)
-	
+
 	c.JSON(appErr.HTTPStatus, Response{
 		Success: false,
 		Error: &ErrorInfo{
@@ -72,4 +72,3 @@ func Created(c *gin.Context, data interface{}, message string) {
 func NoContent(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
-

@@ -9,4 +9,3 @@ type LeaderboardRepository interface {
 	GetUserScore(ctx context.Context, gameID string, userID string) (int64, error)
 	GetTotalPlayers(ctx context.Context, gameID string) (int64, error)
 }
-

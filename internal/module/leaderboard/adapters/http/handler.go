@@ -97,4 +97,3 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		leaderboard.GET("/rank/:user_id", h.GetUserRank)
 	}
 }
-

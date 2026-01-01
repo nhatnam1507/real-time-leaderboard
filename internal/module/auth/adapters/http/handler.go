@@ -131,4 +131,3 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		auth.POST("/refresh", h.RefreshToken)
 	}
 }
-

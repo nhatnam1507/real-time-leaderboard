@@ -170,4 +170,3 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 
 	return tokenPair, nil
 }
-

@@ -63,4 +63,3 @@ func GetUserID(c *gin.Context) (string, bool) {
 	id, ok := userID.(string)
 	return id, ok
 }
-

@@ -92,4 +92,3 @@ func (uc *LeaderboardUseCase) GetUserRank(ctx context.Context, gameID string, us
 
 	return entry, nil
 }
-

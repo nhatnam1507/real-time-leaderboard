@@ -63,9 +63,9 @@ func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlay
 	}
 
 	report := &domain.TopPlayersReport{
-		GameID:    req.GameID,
-		Players:   players,
-		Total:     total,
+		GameID:  req.GameID,
+		Players: players,
+		Total:   total,
 	}
 
 	if req.StartDate != nil {
@@ -77,4 +77,3 @@ func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlay
 
 	return report, nil
 }
-

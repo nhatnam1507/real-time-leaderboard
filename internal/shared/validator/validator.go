@@ -13,7 +13,7 @@ var validate *validator.Validate
 
 func init() {
 	validate = validator.New()
-	
+
 	// Register custom tag name function to use json tags
 	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
@@ -83,4 +83,3 @@ func formatFieldError(fieldError validator.FieldError) string {
 func GetValidator() *validator.Validate {
 	return validate
 }
-

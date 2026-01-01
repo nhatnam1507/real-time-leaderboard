@@ -74,4 +74,3 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		reports.GET("/top-players", h.GetTopPlayersReport)
 	}
 }
-

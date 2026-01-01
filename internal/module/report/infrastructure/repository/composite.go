@@ -9,7 +9,7 @@ import (
 
 // CompositeReportRepository combines Redis and PostgreSQL repositories
 type CompositeReportRepository struct {
-	redisRepo  *RedisReportRepository
+	redisRepo    *RedisReportRepository
 	postgresRepo *PostgresReportRepository
 }
 
@@ -37,4 +37,3 @@ func (r *CompositeReportRepository) GetTopPlayersByDateRange(ctx context.Context
 func (r *CompositeReportRepository) GetTotalPlayers(ctx context.Context, gameID string) (int64, error) {
 	return r.redisRepo.GetTotalPlayers(ctx, gameID)
 }
-

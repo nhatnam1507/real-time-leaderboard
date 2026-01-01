@@ -88,4 +88,3 @@ func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context,
 
 	return players, nil
 }
-

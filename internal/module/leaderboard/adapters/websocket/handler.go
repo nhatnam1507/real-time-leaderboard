@@ -32,29 +32,29 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client
 type Client struct {
-	hub              *Hub
-	conn             *websocket.Conn
-	send             chan []byte
+	hub                *Hub
+	conn               *websocket.Conn
+	send               chan []byte
 	leaderboardUseCase *application.LeaderboardUseCase
-	gameID           string
+	gameID             string
 }
 
 // Hub maintains the set of active clients and broadcasts messages
 type Hub struct {
-	clients           map[*Client]bool
-	broadcast         chan []byte
-	register         chan *Client
-	unregister       chan *Client
+	clients            map[*Client]bool
+	broadcast          chan []byte
+	register           chan *Client
+	unregister         chan *Client
 	leaderboardUseCase *application.LeaderboardUseCase
 }
 
 // NewHub creates a new hub
 func NewHub(leaderboardUseCase *application.LeaderboardUseCase) *Hub {
 	return &Hub{
-		clients:           make(map[*Client]bool),
-		broadcast:         make(chan []byte),
-		register:         make(chan *Client),
-		unregister:       make(chan *Client),
+		clients:            make(map[*Client]bool),
+		broadcast:          make(chan []byte),
+		register:           make(chan *Client),
+		unregister:         make(chan *Client),
 		leaderboardUseCase: leaderboardUseCase,
 	}
 }
@@ -198,11 +198,11 @@ func HandleWebSocket(hub *Hub) gin.HandlerFunc {
 		gameID := c.Query("game_id")
 
 		client := &Client{
-			hub:              hub,
-			conn:             conn,
-			send:             make(chan []byte, 256),
+			hub:                hub,
+			conn:               conn,
+			send:               make(chan []byte, 256),
 			leaderboardUseCase: hub.leaderboardUseCase,
-			gameID:           gameID,
+			gameID:             gameID,
 		}
 
 		client.hub.register <- client
@@ -225,4 +225,3 @@ func HandleWebSocket(hub *Hub) gin.HandlerFunc {
 		go client.readPump()
 	}
 }
-

@@ -136,4 +136,3 @@ func AsAppError(err error) *AppError {
 	}
 	return NewInternalError("Internal server error", err)
 }
-

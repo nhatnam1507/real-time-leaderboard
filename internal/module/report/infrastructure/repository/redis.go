@@ -76,4 +76,3 @@ func (r *RedisReportRepository) GetTotalPlayers(ctx context.Context, gameID stri
 
 	return count, nil
 }
-

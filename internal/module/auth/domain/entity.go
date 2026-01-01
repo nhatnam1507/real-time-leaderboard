@@ -18,4 +18,3 @@ type TokenPair struct {
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
 }
-

@@ -83,7 +83,7 @@ func (h *Handler) GetUserScores(c *gin.Context) {
 	}
 
 	gameID := c.Query("game_id")
-	
+
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
@@ -104,4 +104,3 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		scores.GET("/me", h.GetUserScores)
 	}
 }
-

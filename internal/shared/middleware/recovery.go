@@ -19,9 +19,8 @@ func Recovery(l *logger.Logger) gin.HandlerFunc {
 		}
 
 		log.Errorf("Panic recovered: %v", recovered)
-		
+
 		response.Error(c, errors.NewInternalError("Internal server error", nil))
 		c.AbortWithStatus(http.StatusInternalServerError)
 	})
 }
-

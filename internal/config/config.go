@@ -57,7 +57,7 @@ type JWTConfig struct {
 
 // LoggerConfig holds logger configuration
 type LoggerConfig struct {
-	Level string
+	Level  string
 	Pretty bool
 }
 
@@ -157,4 +157,3 @@ func (c *ServerConfig) GetAddr() string {
 func (c *RedisConfig) GetAddr() string {
 	return fmt.Sprintf("%s:%s", c.Host, c.Port)
 }
-

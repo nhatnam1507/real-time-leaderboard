@@ -11,7 +11,6 @@ type Score struct {
 	UserID      string          `json:"user_id"`
 	GameID      string          `json:"game_id"`
 	Score       int64           `json:"score"`
-	SubmittedAt time.Time      `json:"submitted_at"`
+	SubmittedAt time.Time       `json:"submitted_at"`
 	Metadata    json.RawMessage `json:"metadata,omitempty"`
 }
-

@@ -13,4 +13,3 @@ type Leaderboard struct {
 	Entries []LeaderboardEntry `json:"entries"`
 	Total   int64              `json:"total"`
 }
-

@@ -222,4 +222,3 @@ func (r *PostgresScoreRepository) GetHighestByUserIDAndGameID(ctx context.Contex
 
 	return &score, nil
 }
-

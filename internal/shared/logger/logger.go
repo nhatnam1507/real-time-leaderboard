@@ -121,4 +121,3 @@ func (l *Logger) WithUserID(userID string) *Logger {
 func (l *Logger) GetZerolog() zerolog.Logger {
 	return l.logger
 }
-

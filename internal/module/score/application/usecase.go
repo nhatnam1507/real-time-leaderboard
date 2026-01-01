@@ -11,9 +11,9 @@ import (
 
 // ScoreUseCase handles score use cases
 type ScoreUseCase struct {
-	scoreRepo        domain.ScoreRepository
-	leaderboardRepo  domain.LeaderboardRepository
-	logger           *logger.Logger
+	scoreRepo       domain.ScoreRepository
+	leaderboardRepo domain.LeaderboardRepository
+	logger          *logger.Logger
 }
 
 // NewScoreUseCase creates a new score use case
@@ -112,4 +112,3 @@ func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID
 
 	return scores, nil
 }
-

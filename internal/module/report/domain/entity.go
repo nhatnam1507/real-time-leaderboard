@@ -19,4 +19,3 @@ type TopPlayersReport struct {
 	Players   []TopPlayer `json:"players"`
 	Total     int64       `json:"total"`
 }
-
