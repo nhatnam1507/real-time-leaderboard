@@ -5,7 +5,7 @@
 
 set -e
 
-MIGRATIONS_DIR="./internal/infrastructure/database/migrations"
+MIGRATIONS_DIR="./internal/shared/database/migrations"
 DB_URL="${DB_URL:-postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable}"
 
 if [ -z "$1" ]; then

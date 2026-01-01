@@ -75,9 +75,11 @@ graph TB
         Middleware[Middleware]
         Logger[Logger]
         Validator[Validator]
+        Database[Database Connection]
+        Redis[Redis Connection]
     end
     
-    subgraph infra[External Infrastructure]
+    subgraph infra[External Services]
         Postgres[(PostgreSQL)]
         Redis[(Redis)]
     end
@@ -96,27 +98,33 @@ graph TB
     AuthApplication --> AuthDomain
     AuthApplication --> AuthDomainRepo
     AuthDomainRepo --> AuthInfra
-    AuthInfra --> Postgres
+    AuthInfra --> Database
+    Database --> Postgres
     
     ScoreAdapter --> ScoreApplication
     ScoreApplication --> ScoreDomain
     ScoreApplication --> ScoreDomainRepo
     ScoreDomainRepo --> ScoreInfra
-    ScoreInfra --> Postgres
-    ScoreInfra --> Redis
+    ScoreInfra --> Database
+    ScoreInfra --> RedisClient
+    Database --> Postgres
+    RedisClient --> Redis
     
     LeaderboardAdapter --> LeaderboardApplication
     LeaderboardApplication --> LeaderboardDomain
     LeaderboardApplication --> LeaderboardDomainRepo
     LeaderboardDomainRepo --> LeaderboardInfra
-    LeaderboardInfra --> Redis
+    LeaderboardInfra --> RedisClient
+    RedisClient --> Redis
     
     ReportAdapter --> ReportApplication
     ReportApplication --> ReportDomain
     ReportApplication --> ReportDomainRepo
     ReportDomainRepo --> ReportInfra
-    ReportInfra --> Redis
-    ReportInfra --> Postgres
+    ReportInfra --> RedisClient
+    ReportInfra --> Database
+    RedisClient --> Redis
+    Database --> Postgres
     
     AuthAdapter --> Middleware
     ScoreAdapter --> Middleware
@@ -189,24 +197,24 @@ real-time-leaderboard/
 ├── internal/
 │   ├── config/                     # Configuration management
 │   │   └── config.go
-│   ├── shared/                     # Shared utilities
+│   ├── shared/                     # Shared utilities and infrastructure
 │   │   ├── errors/                # Error definitions
 │   │   ├── response/               # API response helpers
 │   │   ├── middleware/             # HTTP middleware
 │   │   ├── logger/                 # Logger implementation
-│   │   └── validator/              # Request validation
-│   ├── module/                     # Self-contained modules
-│   │   ├── auth/                   # Auth Module
-│   │   │   ├── domain/            # Domain layer
-│   │   │   ├── application/       # Application layer
-│   │   │   ├── adapters/          # Adapters layer
-│   │   │   └── infrastructure/    # Infrastructure layer
-│   │   ├── score/                  # Score Module
-│   │   ├── leaderboard/            # Leaderboard Module
-│   │   └── report/                 # Report Module
-│   └── infrastructure/             # Shared infrastructure
-│       ├── database/              # Database connections
-│       └── redis/                  # Redis connections
+│   │   ├── validator/              # Request validation
+│   │   ├── database/               # Database connections
+│   │   │   └── migrations/        # Database migrations
+│   │   └── redis/                  # Redis connections
+│   └── module/                     # Self-contained modules
+│       ├── auth/                   # Auth Module
+│       │   ├── domain/            # Domain layer
+│       │   ├── application/       # Application layer
+│       │   ├── adapters/          # Adapters layer
+│       │   └── infrastructure/    # Infrastructure layer
+│       ├── score/                  # Score Module
+│       ├── leaderboard/            # Leaderboard Module
+│       └── report/                 # Report Module
 ├── scripts/                        # Utility scripts
 │   └── migrate.sh
 ├── docker/
@@ -472,7 +480,7 @@ go test ./internal/module/auth/...
 
 ```bash
 # Create a new migration
-migrate create -ext sql -dir internal/infrastructure/database/migrations -seq migration_name
+migrate create -ext sql -dir internal/shared/database/migrations -seq migration_name
 
 # Run migrations
 ./scripts/migrate.sh up
@@ -503,10 +511,9 @@ leaderboard-service/
 ├── internal/
 │   ├── config/
 │   ├── shared/          # Copy or use shared library
-│   ├── module/
-│   │   └── leaderboard/ # Copy entire module - no changes needed
-│   └── infrastructure/
-│       └── redis/       # Module-specific connection
+│   │   └── redis/       # Redis connection (shared infrastructure)
+│   └── module/
+│       └── leaderboard/ # Copy entire module - no changes needed
 ```
 
 ### Benefits

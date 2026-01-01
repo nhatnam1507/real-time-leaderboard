@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/config"
-	"real-time-leaderboard/internal/infrastructure/database"
-	redisInfra "real-time-leaderboard/internal/infrastructure/redis"
+	"real-time-leaderboard/internal/shared/database"
+	redisInfra "real-time-leaderboard/internal/shared/redis"
 	authHTTP "real-time-leaderboard/internal/module/auth/adapters/http"
 	authApp "real-time-leaderboard/internal/module/auth/application"
 	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
