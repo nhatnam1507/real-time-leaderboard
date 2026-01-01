@@ -24,26 +24,12 @@ init:
 ## start-dev: Start compose deps file and start the application with air in local VM. Uses migrate script with db url pointing to localhost
 start-dev:
 	@SILENT=1 ./scripts/init.sh
-	@echo "Starting development environment..."
-	@echo "Starting dependency services..."
-	@docker compose -f $(COMPOSE_DEPS_FILE) up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 5
-	@echo "Running database migrations..."
-	@DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable $(MIGRATE_SCRIPT) up
-	@echo "Starting application with air..."
-	@air
+	@./scripts/run.sh dev
 
-## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to service name in compose file
+## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to localhost
 run:
 	@SILENT=1 ./scripts/init.sh
-	@echo "Starting full docker compose environment..."
-	@docker compose -f $(COMPOSE_FULL_FILE) up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 10
-	@echo "Running database migrations..."
-	@DB_URL=postgres://postgres:postgres@postgres:5432/leaderboard?sslmode=disable $(MIGRATE_SCRIPT) up
-	@echo "Services are running. Use 'docker compose -f $(COMPOSE_FULL_FILE) logs -f' to view logs."
+	@./scripts/run.sh all
 
 ## check: Run linter and test (golangci-lint and go test for all unit test)
 check:

@@ -63,6 +63,16 @@ else
     echo_if_verbose "✓ air already installed"
 fi
 
+# Check and install wait4x for service health checking
+if ! command_exists wait4x; then
+    echo_if_verbose "Installing wait4x..."
+    go install wait4x.dev/v3/cmd/wait4x@latest > /dev/null 2>&1
+    echo_if_verbose "✓ wait4x installed"
+    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+else
+    echo_if_verbose "✓ wait4x already installed"
+fi
+
 # Verify docker is installed
 if ! command_exists docker; then
     echo_if_verbose "⚠ Warning: docker is not installed. Docker is required for local full run with docker compose."

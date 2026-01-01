@@ -43,10 +43,15 @@ This will install all required tools (golangci-lint, migrate, air) and verify Do
 make start-dev
 ```
 
+Or directly (can be run from any directory):
+```bash
+./scripts/run.sh dev
+```
+
 This will:
-- Start dependency services (PostgreSQL, Redis) via Docker Compose
-- Wait for services to be ready
-- Run database migrations
+- Start dependency services (PostgreSQL, Redis) via Docker Compose (if not already running)
+- Wait for services to be ready using wait4x
+- Run database migrations (idempotent)
 - Start the application with hot reload using `air`
 
 The server will start on `http://localhost:8080`
@@ -57,10 +62,15 @@ The server will start on `http://localhost:8080`
 make run
 ```
 
+Or directly (can be run from any directory):
+```bash
+./scripts/run.sh all
+```
+
 This will:
 - Start all services (PostgreSQL, Redis, Application) via Docker Compose
-- Wait for services to be ready
-- Run database migrations
+- Wait for services to be ready using wait4x
+- Run database migrations (idempotent)
 - Start the application in a container
 
 The server will start on `http://localhost:8080`
@@ -107,7 +117,7 @@ real-time-leaderboard/
 │   ├── shared/         # Shared utilities and infrastructure
 │   └── module/         # Self-contained modules (auth, score, leaderboard, report)
 ├── docs/               # Documentation
-├── scripts/            # Utility scripts (init.sh, migrate.sh)
+├── scripts/            # Utility scripts (init.sh, run.sh, migrate.sh)
 └── docker/             # Docker configuration
     ├── Dockerfile                    # Production Docker image
     ├── docker-compose.deps.yml       # Dependency services (postgres, redis)

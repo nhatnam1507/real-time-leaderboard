@@ -190,7 +190,8 @@ real-time-leaderboard/
 │       └── report/                 # Report Module
 ├── scripts/                        # Utility scripts
 │   ├── init.sh                    # Initialize development environment
-│   └── migrate.sh                 # Database migration script
+│   ├── run.sh                     # Application startup script (dev/all modes)
+│   └── migrate.sh                 # Database migration tool
 ├── docker/
 │   ├── Dockerfile                 # Production Docker image
 │   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)

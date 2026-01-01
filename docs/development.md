@@ -33,18 +33,20 @@ make help
 make init
 
 # Start development environment
-# - Starts dependency services (PostgreSQL, Redis) via Docker Compose
-# - Waits for services to be ready
-# - Runs database migrations
+# - Starts dependency services (PostgreSQL, Redis) via Docker Compose (if not already running)
+# - Waits for services to be ready using wait4x (checks actual service health)
+# - Runs database migrations (idempotent - safe to run multiple times)
 # - Starts the application with hot reload using air
 make start-dev
+# Or directly: ./scripts/run.sh dev
 
 # Run full Docker Compose setup
 # - Starts all services (PostgreSQL, Redis, Application) in containers
-# - Waits for services to be ready
-# - Runs database migrations
+# - Waits for services to be ready using wait4x (checks actual service health)
+# - Runs database migrations (idempotent - safe to run multiple times)
 # - Application runs in Docker container
 make run
+# Or directly: ./scripts/run.sh all
 
 # Run linter and tests
 # - Runs golangci-lint on all code
@@ -57,9 +59,35 @@ make check
 The Docker setup is modularized for better organization:
 
 - **`docker/docker-compose.deps.yml`**: Contains only dependency services (PostgreSQL, Redis)
+  - Services are reused between `dev` and `all` modes to avoid conflicts
+  - Containers are only started if they don't already exist
 - **`docker/docker-compose.yml`**: Full compose file that includes deps and adds the application service
   - Uses Docker Compose `include` feature to include the deps file
+  - App container uses service names (postgres/redis) from docker network
   - Can be used for production deployments
+
+### Scripts
+
+The project includes utility scripts in the `scripts/` directory:
+
+- **`run.sh`**: Unified script for starting the application
+  - `./scripts/run.sh dev` - Start deps and run app with air (hot reload)
+  - `./scripts/run.sh all` - Start full docker compose environment
+  - Handles service health checking with wait4x
+  - Prevents container conflicts by checking if services are already running
+  - **Can be run from any directory** - paths are resolved relative to script location
+  
+- **`migrate.sh`**: Database migration tool
+  - `./scripts/migrate.sh up [version]` - Apply migrations
+  - `./scripts/migrate.sh down [version]` - Rollback migrations
+  - Idempotent - safe to run multiple times
+  - Validates parameter count and provides helpful error messages
+  - **Can be run from any directory** - paths are resolved relative to script location
+
+- **`init.sh`**: Development environment initialization
+  - Installs required tools (golangci-lint, migrate, air, wait4x)
+  - Verifies Docker/Docker Compose availability
+  - Downloads Go dependencies
 
 ### Development Workflow
 
@@ -104,24 +132,40 @@ go test ./internal/module/auth/...
 
 ## Database Migrations
 
-Migrations are automatically run when using `make start-dev` or `make run`. You can also run them manually:
+Migrations are automatically run when using `make start-dev` or `make run`. The migration tool is idempotent, meaning it's safe to run multiple times - it only applies new migrations that haven't been run yet.
+
+You can also run migrations manually using the `migrate.sh` tool:
 
 ```bash
-# Run migrations (using the migrate script)
-# For local development (when using make start-dev)
-DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable ./scripts/migrate.sh up
+# Run all pending migrations (from project root)
+./scripts/migrate.sh up
 
-# For Docker Compose (when using make run)
-DB_URL=postgres://postgres:postgres@postgres:5432/leaderboard?sslmode=disable ./scripts/migrate.sh up
+# Or from any directory (using absolute path)
+/path/to/project/scripts/migrate.sh up
 
-# Rollback migrations
-DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable ./scripts/migrate.sh down
+# Run migrations up to a specific version
+./scripts/migrate.sh up 2
 
-# Create a new migration
+# Rollback one migration
+./scripts/migrate.sh down
+
+# Rollback to a specific version
+./scripts/migrate.sh down 1
+
+# Custom DB URL (if needed)
+DB_URL=postgres://user:pass@host:5432/dbname?sslmode=disable ./scripts/migrate.sh up
+```
+
+**Note**: All scripts resolve paths relative to their location, so they can be run from any directory without path issues.
+
+**Note**: The migrate script automatically uses `localhost:5432` by default since migrations run on the host machine. The DB_URL can be overridden via environment variable if needed.
+
+**Create a new migration**:
+```bash
 migrate create -ext sql -dir internal/shared/database/migrations -seq migration_name
 ```
 
-The `migrate` tool is automatically installed by `make init` if not already present.
+The `migrate` and `wait4x` tools are automatically installed by `make init` if not already present.
 
 ## Technology Stack
 
