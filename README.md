@@ -30,51 +30,40 @@ git clone <repository-url>
 cd real-time-leaderboard
 ```
 
-2. **Copy environment variables**:
+2. **Initialize development environment**:
 ```bash
-cp .env.example .env
+make init
 ```
 
-3. **Start services with Docker Compose**:
-```bash
-make docker-up
-# or
-docker-compose up -d
-```
+This will install all required tools (golangci-lint, migrate, air) and verify Docker/Docker Compose are available.
 
-This will start:
-- PostgreSQL on port 5432
-- Redis on port 6379
-- Application on port 8080
-
-4. **Run database migrations**:
-```bash
-make install-tools  # Install migrate tool if needed
-make migrate-up
-```
-
-5. **Run the application**:
-```bash
-make run
-# or
-go run cmd/server/main.go
-```
-
-The server will start on `http://localhost:8080`
-
-### Quick Development Setup
-
-For a complete development environment setup:
+3. **Start development environment** (recommended for development):
 
 ```bash
-make dev
+make start-dev
 ```
 
 This will:
-1. Start Docker services (PostgreSQL, Redis)
-2. Wait for services to be ready
-3. Run database migrations
-4. Start the application
+- Start dependency services (PostgreSQL, Redis) via Docker Compose
+- Wait for services to be ready
+- Run database migrations
+- Start the application with hot reload using `air`
+
+The server will start on `http://localhost:8080`
+
+4. **Or run full Docker Compose setup** (for production-like testing):
+
+```bash
+make run
+```
+
+This will:
+- Start all services (PostgreSQL, Redis, Application) via Docker Compose
+- Wait for services to be ready
+- Run database migrations
+- Start the application in a container
+
+The server will start on `http://localhost:8080`
 
 ## Documentation
 
@@ -93,20 +82,17 @@ For detailed documentation, see the [docs](./docs/) folder:
 # Show all available commands
 make help
 
-# Run tests
-make test
+# Initialize development environment (install tools)
+make init
 
-# Run linter
-make lint
+# Start development environment (deps + app with hot reload)
+make start-dev
 
-# Build application
-make build
+# Run full Docker Compose setup (all services in containers)
+make run
 
-# Start Docker services
-make docker-up
-
-# Run migrations
-make migrate-up
+# Run linter and tests
+make check
 ```
 
 See [Development Guide](./docs/development.md) for complete list of commands.
@@ -121,8 +107,11 @@ real-time-leaderboard/
 │   ├── shared/         # Shared utilities and infrastructure
 │   └── module/         # Self-contained modules (auth, score, leaderboard, report)
 ├── docs/               # Documentation
-├── scripts/            # Utility scripts
+├── scripts/            # Utility scripts (init.sh, migrate.sh)
 └── docker/             # Docker configuration
+    ├── Dockerfile                    # Production Docker image
+    ├── docker-compose.deps.yml       # Dependency services (postgres, redis)
+    └── docker-compose.yml            # Full compose file (includes deps + app)
 ```
 
 For detailed project structure, see [Architecture Documentation](./docs/architecture.md).

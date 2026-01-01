@@ -1,13 +1,11 @@
-.PHONY: help build run test lint fmt vet clean deps migrate-up migrate-down migrate-create install-tools docker-up docker-down docker-logs
+.PHONY: help init start-dev run check
 
 # Variables
-APP_NAME := leaderboard
-BINARY_NAME := $(APP_NAME)
-BINARY_PATH := ./bin/$(BINARY_NAME)
-MAIN_PATH := ./cmd/server/main.go
-MIGRATIONS_DIR := ./internal/shared/database/migrations
-COVERAGE_FILE := coverage.out
-COVERAGE_HTML := coverage.html
+COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
+COMPOSE_FULL_FILE := docker/docker-compose.yml
+MIGRATE_SCRIPT := ./scripts/migrate.sh
+PATH := $(shell go env GOPATH)/bin:$(PATH)
+export PATH
 
 # Default target
 .DEFAULT_GOAL := help
@@ -19,142 +17,39 @@ help:
 	@echo 'Available targets:'
 	@sed -n 's/^##//p' $(MAKEFILE_LIST) | awk -F: '{printf "  %-20s %s\n", $$1, $$2}'
 
-## deps: Download and install dependencies
-deps:
-	@echo "Downloading dependencies..."
-	@go mod download
-	@go mod tidy
-	@echo "Dependencies installed successfully"
+## init: Install all required tools and libs for lint, test, build, local full run with docker compose
+init:
+	@./scripts/init.sh
 
-## fmt: Format Go code
-fmt:
-	@echo "Formatting code..."
-	@go fmt ./...
-	@echo "Code formatted successfully"
-
-## vet: Run go vet
-vet:
-	@echo "Running go vet..."
-	@go vet ./...
-	@echo "Vet check completed"
-
-## lint: Run linter (golangci-lint)
-lint:
-	@echo "Running linter..."
-	@if ! command -v golangci-lint &> /dev/null; then \
-		echo "golangci-lint not found. Installing..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin latest; \
-	fi
-	@golangci-lint run ./...
-	@echo "Linter check completed"
-
-## test: Run tests with coverage
-test:
-	@echo "Running tests..."
-	@go test -v -race -coverprofile=$(COVERAGE_FILE) -covermode=atomic ./...
-	@echo "Tests completed"
-	@echo "Coverage report saved to $(COVERAGE_FILE)"
-
-## test-coverage: Run tests and show coverage report
-test-coverage: test
-	@echo "Generating coverage report..."
-	@go tool cover -html=$(COVERAGE_FILE) -o $(COVERAGE_HTML)
-	@echo "Coverage report generated: $(COVERAGE_HTML)"
-	@go tool cover -func=$(COVERAGE_FILE) | tail -1
-
-## test-short: Run tests in short mode
-test-short:
-	@echo "Running tests (short mode)..."
-	@go test -short -v ./...
-	@echo "Tests completed"
-
-## build: Build the application binary
-build:
-	@echo "Building $(BINARY_NAME)..."
-	@mkdir -p bin
-	@go build -o $(BINARY_PATH) $(MAIN_PATH)
-	@echo "Build completed: $(BINARY_PATH)"
-
-## build-linux: Build the application binary for Linux
-build-linux:
-	@echo "Building $(BINARY_NAME) for Linux..."
-	@mkdir -p bin
-	@GOOS=linux GOARCH=amd64 go build -o $(BINARY_PATH)-linux $(MAIN_PATH)
-	@echo "Build completed: $(BINARY_PATH)-linux"
-
-## run: Run the application
-run:
-	@echo "Running application..."
-	@go run $(MAIN_PATH)
-
-## clean: Clean build artifacts and test files
-clean:
-	@echo "Cleaning build artifacts..."
-	@rm -rf bin/
-	@rm -f $(COVERAGE_FILE) $(COVERAGE_HTML)
-	@go clean -cache -testcache
-	@echo "Clean completed"
-
-## migrate-up: Run database migrations up
-migrate-up:
-	@echo "Running database migrations (up)..."
-	@./scripts/migrate.sh up
-	@echo "Migrations completed"
-
-## migrate-down: Rollback database migrations
-migrate-down:
-	@echo "Rolling back database migrations..."
-	@./scripts/migrate.sh down
-	@echo "Rollback completed"
-
-## migrate-create: Create a new migration file
-migrate-create:
-	@if [ -z "$(NAME)" ]; then \
-		echo "Error: NAME is required. Usage: make migrate-create NAME=migration_name"; \
-		exit 1; \
-	fi
-	@echo "Creating migration: $(NAME)..."
-	@migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(NAME)
-	@echo "Migration created successfully"
-
-## install-tools: Install required development tools
-install-tools:
-	@echo "Installing development tools..."
-	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-	@echo "Tools installed successfully"
-
-## docker-up: Start Docker services
-docker-up:
-	@echo "Starting Docker services..."
-	@docker-compose up -d
-	@echo "Docker services started"
-
-## docker-down: Stop Docker services
-docker-down:
-	@echo "Stopping Docker services..."
-	@docker-compose down
-	@echo "Docker services stopped"
-
-## docker-logs: Show Docker logs
-docker-logs:
-	@docker-compose logs -f
-
-## docker-restart: Restart Docker services
-docker-restart: docker-down docker-up
-
-## dev: Start development environment (Docker + migrate + run)
-dev: docker-up
+## start-dev: Start compose deps file and start the application with air in local VM. Uses migrate script with db url pointing to localhost
+start-dev:
+	@SILENT=1 ./scripts/init.sh
+	@echo "Starting development environment..."
+	@echo "Starting dependency services..."
+	@docker compose -f $(COMPOSE_DEPS_FILE) up -d
 	@echo "Waiting for services to be ready..."
 	@sleep 5
-	@$(MAKE) migrate-up
-	@echo "Starting application..."
-	@$(MAKE) run
+	@echo "Running database migrations..."
+	@DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable $(MIGRATE_SCRIPT) up
+	@echo "Starting application with air..."
+	@air
 
-## ci: Run CI checks (lint, test, build)
-ci: lint test build
-	@echo "CI checks completed successfully"
+## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to service name in compose file
+run:
+	@SILENT=1 ./scripts/init.sh
+	@echo "Starting full docker compose environment..."
+	@docker compose -f $(COMPOSE_FULL_FILE) up -d
+	@echo "Waiting for services to be ready..."
+	@sleep 10
+	@echo "Running database migrations..."
+	@DB_URL=postgres://postgres:postgres@postgres:5432/leaderboard?sslmode=disable $(MIGRATE_SCRIPT) up
+	@echo "Services are running. Use 'docker compose -f $(COMPOSE_FULL_FILE) logs -f' to view logs."
 
-## all: Run all checks and build
-all: fmt vet lint test build
-	@echo "All checks and build completed successfully"
-
+## check: Run linter and test (golangci-lint and go test for all unit test)
+check:
+	@SILENT=1 ./scripts/init.sh
+	@echo "Running linter..."
+	@golangci-lint run ./...
+	@echo "Running tests..."
+	@go test ./...
+	@echo "All checks completed successfully"

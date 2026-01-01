@@ -2,9 +2,6 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Install air for hot reload
-RUN go install github.com/cosmtrek/air@latest
-
 # Copy go mod files
 COPY go.mod go.sum ./
 RUN go mod download
@@ -22,9 +19,6 @@ WORKDIR /root/
 
 # Copy the binary from builder
 COPY --from=builder /app/bin/server .
-
-# Copy air binary for hot reload (development)
-COPY --from=builder /go/bin/air /usr/local/bin/air
 
 EXPOSE 8080
 

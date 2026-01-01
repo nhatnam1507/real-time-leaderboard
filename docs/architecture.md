@@ -189,12 +189,15 @@ real-time-leaderboard/
 │       ├── leaderboard/            # Leaderboard Module
 │       └── report/                 # Report Module
 ├── scripts/                        # Utility scripts
-│   └── migrate.sh
+│   ├── init.sh                    # Initialize development environment
+│   └── migrate.sh                 # Database migration script
 ├── docker/
-│   └── Dockerfile
-├── docker-compose.yml
+│   ├── Dockerfile                 # Production Docker image
+│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
+│   └── docker-compose.yml         # Full compose file (includes deps + app)
 ├── .env.example
 ├── go.mod
+├── Makefile                       # Development commands
 └── README.md
 ```
 

@@ -19,69 +19,72 @@
 
 ## Makefile Commands
 
-The project includes a Makefile with convenient commands for development and CI/CD:
+The project includes a simplified Makefile with essential commands for development:
 
 ```bash
 # Show all available commands
 make help
 
-# Install dependencies
-make deps
+# Initialize development environment
+# - Installs golangci-lint, migrate tool, and air (if missing)
+# - Verifies Docker and Docker Compose are available
+# - Downloads Go dependencies
+# This is automatically run before other targets
+make init
 
-# Format code
-make fmt
+# Start development environment
+# - Starts dependency services (PostgreSQL, Redis) via Docker Compose
+# - Waits for services to be ready
+# - Runs database migrations
+# - Starts the application with hot reload using air
+make start-dev
 
-# Run linter
-make lint
-
-# Run go vet
-make vet
-
-# Run tests with coverage
-make test
-
-# Run tests and generate HTML coverage report
-make test-coverage
-
-# Build the application
-make build
-
-# Run the application
+# Run full Docker Compose setup
+# - Starts all services (PostgreSQL, Redis, Application) in containers
+# - Waits for services to be ready
+# - Runs database migrations
+# - Application runs in Docker container
 make run
 
-# Run database migrations
-make migrate-up
-
-# Rollback database migrations
-make migrate-down
-
-# Create a new migration (requires NAME parameter)
-make migrate-create NAME=migration_name
-
-# Install development tools (migrate, etc.)
-make install-tools
-
-# Start Docker services
-make docker-up
-
-# Stop Docker services
-make docker-down
-
-# View Docker logs
-make docker-logs
-
-# Start full development environment (Docker + migrate + run)
-make dev
-
-# Run CI checks (lint + test + build)
-make ci
-
-# Run all checks and build
-make all
-
-# Clean build artifacts
-make clean
+# Run linter and tests
+# - Runs golangci-lint on all code
+# - Runs all Go unit tests
+make check
 ```
+
+### Docker Compose Files
+
+The Docker setup is modularized for better organization:
+
+- **`docker/docker-compose.deps.yml`**: Contains only dependency services (PostgreSQL, Redis)
+- **`docker/docker-compose.yml`**: Full compose file that includes deps and adds the application service
+  - Uses Docker Compose `include` feature to include the deps file
+  - Can be used for production deployments
+
+### Development Workflow
+
+1. **First time setup**:
+   ```bash
+   make init
+   ```
+
+2. **Daily development**:
+   ```bash
+   make start-dev
+   ```
+   This starts dependencies in Docker and runs the app locally with hot reload.
+
+3. **Testing full Docker setup**:
+   ```bash
+   make run
+   ```
+   This runs everything in Docker containers for production-like testing.
+
+4. **Before committing**:
+   ```bash
+   make check
+   ```
+   This runs linter and tests to ensure code quality.
 
 ## Testing
 
@@ -101,21 +104,24 @@ go test ./internal/module/auth/...
 
 ## Database Migrations
 
+Migrations are automatically run when using `make start-dev` or `make run`. You can also run them manually:
+
 ```bash
-# Run migrations (using make)
-make migrate-up
+# Run migrations (using the migrate script)
+# For local development (when using make start-dev)
+DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable ./scripts/migrate.sh up
+
+# For Docker Compose (when using make run)
+DB_URL=postgres://postgres:postgres@postgres:5432/leaderboard?sslmode=disable ./scripts/migrate.sh up
 
 # Rollback migrations
-make migrate-down
+DB_URL=postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable ./scripts/migrate.sh down
 
 # Create a new migration
-make migrate-create NAME=migration_name
-
-# Or using migrate directly
 migrate create -ext sql -dir internal/shared/database/migrations -seq migration_name
-./scripts/migrate.sh up
-./scripts/migrate.sh down
 ```
+
+The `migrate` tool is automatically installed by `make init` if not already present.
 
 ## Technology Stack
 

@@ -1,3 +1,5 @@
+version: 2
+
 run:
   timeout: 5m
   tests: true
@@ -43,19 +45,13 @@ linters:
     - errcheck
     - goconst
     - gocritic
-    - gofmt
-    - goimports
-    - golint
     - gosec
     - govet
     - ineffassign
     - misspell
     - revive
     - staticcheck
-    - structcheck
-    - typecheck
     - unused
-    - varcheck
 
 issues:
   exclude-rules:
