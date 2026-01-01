@@ -53,6 +53,7 @@ This will:
 - Wait for services to be ready using wait4x
 - Run database migrations (idempotent)
 - Start the application with hot reload using `air`
+- **Press Ctrl+C to stop the application and automatically cleanup dependency services**
 
 The server will start on `http://localhost:8080`
 
@@ -97,9 +98,16 @@ make init
 
 # Start development environment (deps + app with hot reload)
 make start-dev
+# Press Ctrl+C to stop and cleanup dependency services
 
 # Run full Docker Compose setup (all services in containers)
 make run
+
+# Stop the full Docker Compose stack from 'run' target (preserves data/volumes)
+make stop
+
+# Remove all Docker Compose stacks, volumes, and related files
+make clean
 
 # Run linter and tests
 make check

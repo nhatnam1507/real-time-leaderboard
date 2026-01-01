@@ -1,4 +1,4 @@
-.PHONY: help init start-dev run check
+.PHONY: help init start-dev run check stop clean
 
 # Variables
 COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
@@ -39,3 +39,18 @@ check:
 	@echo "Running tests..."
 	@go test ./...
 	@echo "All checks completed successfully"
+
+## stop: Stop full compose stack from 'run' target. Containers removed, volumes/data preserved
+stop:
+	@echo "Stopping full compose stack..."
+	@docker compose -f $(COMPOSE_FULL_FILE) down 2>/dev/null || true
+	@echo "✓ Full compose stack stopped (data preserved)"
+
+## clean: Remove all docker compose stacks, volumes, and related files
+clean:
+	@echo "Cleaning up all compose stacks, volumes, and related files..."
+	@docker compose -f $(COMPOSE_FULL_FILE) down -v 2>/dev/null || true
+	@docker compose -f $(COMPOSE_DEPS_FILE) down -v 2>/dev/null || true
+	@echo "Cleaning up build artifacts..."
+	@rm -rf tmp/ 2>/dev/null || true
+	@echo "✓ Cleanup complete (all data removed)"

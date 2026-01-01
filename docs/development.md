@@ -37,6 +37,7 @@ make init
 # - Waits for services to be ready using wait4x (checks actual service health)
 # - Runs database migrations (idempotent - safe to run multiple times)
 # - Starts the application with hot reload using air
+# - Press Ctrl+C to stop and automatically cleanup dependency services
 make start-dev
 # Or directly: ./scripts/run.sh dev
 
@@ -52,6 +53,18 @@ make run
 # - Runs golangci-lint on all code
 # - Runs all Go unit tests
 make check
+
+# Stop the full Docker Compose stack from 'run' target
+# - Stops and removes all containers from the full compose file
+# - Preserves volumes (data is kept)
+# - Use this after running 'make run'
+make stop
+
+# Remove all Docker Compose stacks, volumes, and related files
+# - Stops and removes all containers from both compose files
+# - Removes all volumes (data will be lost)
+# - Cleans up build artifacts (tmp/ directory)
+make clean
 ```
 
 ### Docker Compose Files
@@ -61,10 +74,16 @@ The Docker setup is modularized for better organization:
 - **`docker/docker-compose.deps.yml`**: Contains only dependency services (PostgreSQL, Redis)
   - Services are reused between `dev` and `all` modes to avoid conflicts
   - Containers are only started if they don't already exist
+  - Stack name: `leaderboard` (defined in compose file)
 - **`docker/docker-compose.yml`**: Full compose file that includes deps and adds the application service
   - Uses Docker Compose `include` feature to include the deps file
   - App container uses service names (postgres/redis) from docker network
+  - Stack name: `leaderboard` (defined in compose file)
   - Can be used for production deployments
+
+**Stopping Services**:
+- In `dev` mode: Press Ctrl+C to stop the application and automatically cleanup dependency services
+- In `all` mode (after `make run`): Use `make stop` to stop the full stack (preserves data) or `make clean` to remove everything
 
 ### Scripts
 
@@ -72,7 +91,8 @@ The project includes utility scripts in the `scripts/` directory:
 
 - **`run.sh`**: Unified script for starting the application
   - `./scripts/run.sh dev` - Start deps and run app with air (hot reload)
-  - `./scripts/run.sh all` - Start full docker compose environment
+    - Press Ctrl+C to stop and automatically cleanup dependency services
+  - `./scripts/run.sh all` - Start full docker compose environment (runs in detached mode)
   - Handles service health checking with wait4x
   - Prevents container conflicts by checking if services are already running
   - **Can be run from any directory** - paths are resolved relative to script location
@@ -101,18 +121,33 @@ The project includes utility scripts in the `scripts/` directory:
    make start-dev
    ```
    This starts dependencies in Docker and runs the app locally with hot reload.
+   - Press Ctrl+C to stop and automatically cleanup dependency services
+   - Air hot reload watches Go files (excludes docker/, docs/, scripts/ directories)
 
 3. **Testing full Docker setup**:
    ```bash
    make run
    ```
    This runs everything in Docker containers for production-like testing.
+   - Services run in detached mode
+   - Use `make stop` to stop the full stack (preserves data) or `make clean` to remove everything
 
 4. **Before committing**:
    ```bash
    make check
    ```
    This runs linter and tests to ensure code quality.
+
+5. **Stopping services**:
+   ```bash
+   # Stop the full stack from 'run' target but preserve data
+   make stop
+   
+   # Remove everything including data and build artifacts
+   make clean
+   ```
+   - `make stop`: Stops the full compose stack (from `make run`) but preserves volumes (data is kept)
+   - `make clean`: Removes all containers, volumes, and build artifacts (complete cleanup)
 
 ## Testing
 
@@ -166,6 +201,17 @@ migrate create -ext sql -dir internal/shared/database/migrations -seq migration_
 ```
 
 The `migrate` and `wait4x` tools are automatically installed by `make init` if not already present.
+
+## Hot Reload Configuration
+
+The project uses [Air](https://github.com/air-verse/air) for hot reload during development. The configuration is in `.air.toml` at the project root.
+
+**Key features**:
+- Automatically rebuilds and restarts the application when Go files change
+- Excludes `docker/`, `docs/`, and `scripts/` directories from file watching
+- Build errors are logged to `tmp/build-errors.log`
+
+The Air configuration is automatically used when running `make start-dev` or `./scripts/run.sh dev`.
 
 ## Technology Stack
 

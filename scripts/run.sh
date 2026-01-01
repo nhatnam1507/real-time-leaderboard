@@ -18,11 +18,11 @@ cd "$PROJECT_ROOT"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Configuration (paths relative to project root)
-COMPOSE_DEPS_FILE="$PROJECT_ROOT/docker/docker-compose.deps.yml"
-COMPOSE_FULL_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
-MIGRATE_SCRIPT="$SCRIPT_DIR/migrate.sh"
+COMPOSE_DEPENDENCIES_FILE="$PROJECT_ROOT/docker/docker-compose.deps.yml"
+COMPOSE_FULL_STACK_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
+MIGRATION_SCRIPT="$SCRIPT_DIR/migrate.sh"
 # Migrations run on host, so always use localhost (ports are exposed)
-DB_URL="postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable"
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable"
 
 # Function to show usage
 show_usage() {
@@ -41,7 +41,7 @@ is_container_running() {
 }
 
 # Function to ensure dependency services are running
-ensure_deps_running() {
+ensure_dependency_services_running() {
     local postgres_running=$(is_container_running "leaderboard-postgres" && echo "yes" || echo "no")
     local redis_running=$(is_container_running "leaderboard-redis" && echo "yes" || echo "no")
     
@@ -51,7 +51,7 @@ ensure_deps_running() {
     fi
     
     echo "Starting dependency services..."
-    docker compose -f "$COMPOSE_DEPS_FILE" up -d
+    docker compose -f "$COMPOSE_DEPENDENCIES_FILE" up -d
 }
 
 # Function to wait for services to be ready
@@ -62,7 +62,7 @@ wait_for_services() {
     
     # Wait for PostgreSQL
     echo "  Waiting for PostgreSQL at localhost:5432..."
-    wait4x postgresql "$DB_URL" \
+    wait4x postgresql "$DATABASE_URL" \
         --timeout 60s \
         --interval 2s || {
         echo "Error: Failed to connect to PostgreSQL"
@@ -84,15 +84,27 @@ wait_for_services() {
 # Function to run database migrations
 run_migrations() {
     echo "Running database migrations..."
-    DB_URL="$DB_URL" "$MIGRATE_SCRIPT" up
+    DB_URL="$DATABASE_URL" "$MIGRATION_SCRIPT" up
+}
+
+# Cleanup function to stop dependency services
+stop_dependency_services() {
+    echo ""
+    echo "Stopping dependency services..."
+    docker compose -f "$COMPOSE_DEPENDENCIES_FILE" down 2>/dev/null || true
+    echo "Cleanup complete"
+    exit 0
 }
 
 # Function to start development mode
-start_dev_mode() {
+start_development_mode() {
+    # Set up signal traps for cleanup
+    trap stop_dependency_services SIGINT SIGTERM
+    
     echo "Starting development environment..."
     
     # Ensure dependency services are running
-    ensure_deps_running
+    ensure_dependency_services_running
     
     # Wait for services to be ready
     wait_for_services
@@ -102,15 +114,16 @@ start_dev_mode() {
     
     # Start application with air (hot reload)
     echo "Starting application with air..."
+    echo "Press Ctrl+C to stop and cleanup..."
     air
 }
 
-# Function to start all mode (full docker compose)
-start_all_mode() {
+# Function to start full stack mode (all services in containers)
+start_full_stack_mode() {
     echo "Starting full docker compose environment..."
     
     # Ensure dependency services are running
-    ensure_deps_running
+    ensure_dependency_services_running
     
     # Wait for services to be ready
     wait_for_services
@@ -125,10 +138,10 @@ start_all_mode() {
     else
         echo "Starting application container..."
         # docker-compose.yml has depends_on with health checks, so it will wait for deps to be healthy
-        docker compose -f "$COMPOSE_FULL_FILE" up -d app
+        docker compose -f "$COMPOSE_FULL_STACK_FILE" up -d app
     fi
     
-    echo "Services are running. Use 'docker compose -f $COMPOSE_FULL_FILE logs -f' to view logs."
+    echo "Services are running. Use 'docker compose -f $COMPOSE_FULL_STACK_FILE logs -f' to view logs."
 }
 
 # Main function - handles CLI input and execution
@@ -148,10 +161,10 @@ main() {
     # Execute based on mode
     case "$mode" in
         dev)
-            start_dev_mode
+            start_development_mode
             ;;
         all)
-            start_all_mode
+            start_full_stack_mode
             ;;
         *)
             echo "Error: Invalid mode '$mode'"

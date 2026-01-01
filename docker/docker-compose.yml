@@ -2,6 +2,8 @@
 # The deps services (postgres, redis) are included from docker-compose.deps.yml
 # Usage: docker compose -f docker/docker-compose.yml up
 
+name: leaderboard
+
 include:
   - docker-compose.deps.yml
 
