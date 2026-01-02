@@ -50,7 +50,7 @@ func (uc *AuthUseCase) Register(ctx context.Context, req RegisterRequest) (*doma
 	// Check if username already exists
 	existingUser, err := uc.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
-		uc.logger.Errorf("Failed to check username existence: %v", err)
+		uc.logger.Errorf(ctx, "Failed to check username existence: %v", err)
 		return nil, nil, response.NewInternalError("Registration failed", err)
 	}
 	if existingUser != nil {
@@ -60,7 +60,7 @@ func (uc *AuthUseCase) Register(ctx context.Context, req RegisterRequest) (*doma
 	// Check if email already exists
 	existingUser, err = uc.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		uc.logger.Errorf("Failed to check email existence: %v", err)
+		uc.logger.Errorf(ctx, "Failed to check email existence: %v", err)
 		return nil, nil, response.NewInternalError("Registration failed", err)
 	}
 	if existingUser != nil {
@@ -70,7 +70,7 @@ func (uc *AuthUseCase) Register(ctx context.Context, req RegisterRequest) (*doma
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		uc.logger.Errorf("Failed to hash password: %v", err)
+		uc.logger.Errorf(ctx, "Failed to hash password: %v", err)
 		return nil, nil, response.NewInternalError("Registration failed", err)
 	}
 
@@ -82,18 +82,18 @@ func (uc *AuthUseCase) Register(ctx context.Context, req RegisterRequest) (*doma
 	}
 
 	if err := uc.userRepo.Create(ctx, user); err != nil {
-		uc.logger.Errorf("Failed to create user: %v", err)
+		uc.logger.Errorf(ctx, "Failed to create user: %v", err)
 		return nil, nil, response.NewInternalError("Registration failed", err)
 	}
 
 	// Generate tokens
 	tokenPair, err := uc.jwtMgr.GenerateTokenPair(user.ID)
 	if err != nil {
-		uc.logger.Errorf("Failed to generate tokens: %v", err)
+		uc.logger.Errorf(ctx, "Failed to generate tokens: %v", err)
 		return nil, nil, response.NewInternalError("Registration failed", err)
 	}
 
-	uc.logger.Infof("User registered: %s", user.ID)
+	uc.logger.Infof(ctx, "User registered: %s", user.ID)
 	return user, tokenPair, nil
 }
 
@@ -102,7 +102,7 @@ func (uc *AuthUseCase) Login(ctx context.Context, req LoginRequest) (*domain.Use
 	// Get user by username
 	user, err := uc.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
-		uc.logger.Errorf("Failed to get user: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get user: %v", err)
 		return nil, nil, response.NewInternalError("Login failed", err)
 	}
 	if user == nil {
@@ -117,11 +117,11 @@ func (uc *AuthUseCase) Login(ctx context.Context, req LoginRequest) (*domain.Use
 	// Generate tokens
 	tokenPair, err := uc.jwtMgr.GenerateTokenPair(user.ID)
 	if err != nil {
-		uc.logger.Errorf("Failed to generate tokens: %v", err)
+		uc.logger.Errorf(ctx, "Failed to generate tokens: %v", err)
 		return nil, nil, response.NewInternalError("Login failed", err)
 	}
 
-	uc.logger.Infof("User logged in: %s", user.ID)
+	uc.logger.Infof(ctx, "User logged in: %s", user.ID)
 	return user, tokenPair, nil
 }
 
@@ -135,7 +135,7 @@ func (uc *AuthUseCase) ValidateToken(ctx context.Context, token string) (string,
 	// Optionally verify user still exists
 	user, err := uc.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		uc.logger.Errorf("Failed to get user: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get user: %v", err)
 		return "", response.NewInternalError("Token validation failed", err)
 	}
 	if user == nil {
@@ -155,7 +155,7 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 	// Verify user exists
 	user, err := uc.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		uc.logger.Errorf("Failed to get user: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get user: %v", err)
 		return nil, response.NewInternalError("Token refresh failed", err)
 	}
 	if user == nil {
@@ -165,7 +165,7 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 	// Generate new token pair
 	tokenPair, err := uc.jwtMgr.GenerateTokenPair(userID)
 	if err != nil {
-		uc.logger.Errorf("Failed to generate tokens: %v", err)
+		uc.logger.Errorf(ctx, "Failed to generate tokens: %v", err)
 		return nil, response.NewInternalError("Token refresh failed", err)
 	}
 

@@ -1,4 +1,3 @@
-// Package middleware provides HTTP middleware for the application.
 package middleware
 
 import (
@@ -9,10 +8,14 @@ import (
 	"real-time-leaderboard/internal/shared/response"
 )
 
-// AuthMiddleware creates authentication middleware
-// This will be implemented to use the auth module's application layer
+const (
+	authHeaderPrefix = "Bearer "
+	userIDKey        = "user_id"
+)
+
+// AuthMiddleware handles authentication
 type AuthMiddleware struct {
-	validateToken func(ctx context.Context, token string) (string, error) // Returns userID and error
+	validateToken func(ctx context.Context, token string) (string, error)
 }
 
 // NewAuthMiddleware creates a new auth middleware
@@ -32,15 +35,13 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// Extract token from "Bearer <token>"
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		if !strings.HasPrefix(authHeader, authHeaderPrefix) {
 			response.Error(c, response.NewUnauthorizedError("Invalid authorization header format"))
 			c.Abort()
 			return
 		}
 
-		token := parts[1]
+		token := strings.TrimPrefix(authHeader, authHeaderPrefix)
 		userID, err := m.validateToken(c.Request.Context(), token)
 		if err != nil {
 			response.Error(c, response.NewUnauthorizedError("Invalid or expired token"))
@@ -48,15 +49,14 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// Store user ID in context
-		c.Set("user_id", userID)
+		c.Set(userIDKey, userID)
 		c.Next()
 	}
 }
 
 // GetUserID retrieves user ID from context
 func GetUserID(c *gin.Context) (string, bool) {
-	userID, exists := c.Get("user_id")
+	userID, exists := c.Get(userIDKey)
 	if !exists {
 		return "", false
 	}

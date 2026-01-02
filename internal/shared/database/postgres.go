@@ -53,7 +53,7 @@ func NewPostgres(cfg config.DatabaseConfig, l *logger.Logger) (*Postgres, error)
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	l.Info("Database connection established")
+	l.Info(context.Background(), "Database connection established")
 
 	return &Postgres{
 		Pool:   pool,
@@ -65,7 +65,7 @@ func NewPostgres(cfg config.DatabaseConfig, l *logger.Logger) (*Postgres, error)
 func (p *Postgres) Close() {
 	if p.Pool != nil {
 		p.Pool.Close()
-		p.logger.Info("Database connection closed")
+		p.logger.Info(context.Background(), "Database connection closed")
 	}
 }
 

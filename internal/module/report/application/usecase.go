@@ -34,6 +34,7 @@ type GetTopPlayersReportRequest struct {
 
 // GetTopPlayersReport generates a top players report
 func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlayersReportRequest) (*domain.TopPlayersReport, error) {
+
 	if req.Limit <= 0 {
 		req.Limit = 10
 	}
@@ -53,13 +54,13 @@ func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlay
 	}
 
 	if err != nil {
-		uc.logger.Errorf("Failed to get top players: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get top players: %v", err)
 		return nil, response.NewInternalError("Failed to generate report", err)
 	}
 
 	total, err := uc.reportRepo.GetTotalPlayers(ctx, req.GameID)
 	if err != nil {
-		uc.logger.Warnf("Failed to get total players: %v", err)
+		uc.logger.Warnf(ctx, "Failed to get total players: %v", err)
 		total = int64(len(players))
 	}
 

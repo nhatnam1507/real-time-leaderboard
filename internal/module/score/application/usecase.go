@@ -39,6 +39,7 @@ type SubmitScoreRequest struct {
 
 // SubmitScore submits a new score
 func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) (*domain.Score, error) {
+
 	// Create score entity
 	score := &domain.Score{
 		UserID: userID,
@@ -52,21 +53,21 @@ func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req Subm
 
 	// Save score to database
 	if err := uc.scoreRepo.Create(ctx, score); err != nil {
-		uc.logger.Errorf("Failed to create score: %v", err)
+		uc.logger.Errorf(ctx, "Failed to create score: %v", err)
 		return nil, response.NewInternalError("Failed to submit score", err)
 	}
 
 	// Update leaderboard in Redis (use highest score for leaderboard)
 	highestScore, err := uc.scoreRepo.GetHighestByUserIDAndGameID(ctx, userID, req.GameID)
 	if err != nil {
-		uc.logger.Errorf("Failed to get highest score: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get highest score: %v", err)
 		return nil, response.NewInternalError("Failed to submit score", err)
 	}
 
 	if highestScore != nil {
 		// Update game-specific leaderboard
 		if err := uc.leaderboardRepo.UpdateScore(ctx, req.GameID, userID, highestScore.Score); err != nil {
-			uc.logger.Errorf("Failed to update game leaderboard: %v", err)
+			uc.logger.Errorf(ctx, "Failed to update game leaderboard: %v", err)
 			// Don't fail the request if leaderboard update fails
 		}
 
@@ -75,18 +76,19 @@ func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req Subm
 		globalHighest, err := uc.scoreRepo.GetHighestByUserID(ctx, userID)
 		if err == nil && globalHighest != nil {
 			if err := uc.leaderboardRepo.UpdateGlobalScore(ctx, userID, globalHighest.Score); err != nil {
-				uc.logger.Errorf("Failed to update global leaderboard: %v", err)
+				uc.logger.Errorf(ctx, "Failed to update global leaderboard: %v", err)
 				// Don't fail the request if leaderboard update fails
 			}
 		}
 	}
 
-	uc.logger.Infof("Score submitted: user=%s, game=%s, score=%d", userID, req.GameID, req.Score)
+	uc.logger.Infof(ctx, "Score submitted: user=%s, game=%s, score=%d", userID, req.GameID, req.Score)
 	return score, nil
 }
 
 // GetUserScores retrieves scores for a user
 func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID string, limit, offset int) ([]*domain.Score, error) {
+
 	if limit <= 0 {
 		limit = 10
 	}
@@ -107,7 +109,7 @@ func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID
 	}
 
 	if err != nil {
-		uc.logger.Errorf("Failed to get user scores: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get user scores: %v", err)
 		return nil, response.NewInternalError("Failed to retrieve scores", err)
 	}
 

@@ -38,7 +38,7 @@ func NewClient(cfg config.RedisConfig, l *logger.Logger) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
-	l.Info("Redis connection established")
+	l.Info(context.Background(), "Redis connection established")
 
 	return &Client{
 		client: rdb,
@@ -56,7 +56,7 @@ func (c *Client) Close() error {
 	if c.client != nil {
 		err := c.client.Close()
 		if err == nil {
-			c.logger.Info("Redis connection closed")
+			c.logger.Info(context.Background(), "Redis connection closed")
 		}
 		return err
 	}

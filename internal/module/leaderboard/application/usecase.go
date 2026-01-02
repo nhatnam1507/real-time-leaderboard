@@ -25,6 +25,7 @@ func NewLeaderboardUseCase(leaderboardRepo domain.LeaderboardRepository, l *logg
 
 // GetGlobalLeaderboard retrieves the global leaderboard
 func (uc *LeaderboardUseCase) GetGlobalLeaderboard(ctx context.Context, limit int64) (*domain.Leaderboard, error) {
+
 	if limit <= 0 {
 		limit = 10
 	}
@@ -34,13 +35,13 @@ func (uc *LeaderboardUseCase) GetGlobalLeaderboard(ctx context.Context, limit in
 
 	entries, err := uc.leaderboardRepo.GetTopPlayers(ctx, "global", limit)
 	if err != nil {
-		uc.logger.Errorf("Failed to get global leaderboard: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get global leaderboard: %v", err)
 		return nil, response.NewInternalError("Failed to retrieve leaderboard", err)
 	}
 
 	total, err := uc.leaderboardRepo.GetTotalPlayers(ctx, "global")
 	if err != nil {
-		uc.logger.Warnf("Failed to get total players: %v", err)
+		uc.logger.Warnf(ctx, "Failed to get total players: %v", err)
 		total = int64(len(entries))
 	}
 
@@ -53,6 +54,7 @@ func (uc *LeaderboardUseCase) GetGlobalLeaderboard(ctx context.Context, limit in
 
 // GetGameLeaderboard retrieves a game-specific leaderboard
 func (uc *LeaderboardUseCase) GetGameLeaderboard(ctx context.Context, gameID string, limit int64) (*domain.Leaderboard, error) {
+
 	if limit <= 0 {
 		limit = 10
 	}
@@ -62,13 +64,13 @@ func (uc *LeaderboardUseCase) GetGameLeaderboard(ctx context.Context, gameID str
 
 	entries, err := uc.leaderboardRepo.GetTopPlayers(ctx, gameID, limit)
 	if err != nil {
-		uc.logger.Errorf("Failed to get game leaderboard: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get game leaderboard: %v", err)
 		return nil, response.NewInternalError("Failed to retrieve leaderboard", err)
 	}
 
 	total, err := uc.leaderboardRepo.GetTotalPlayers(ctx, gameID)
 	if err != nil {
-		uc.logger.Warnf("Failed to get total players: %v", err)
+		uc.logger.Warnf(ctx, "Failed to get total players: %v", err)
 		total = int64(len(entries))
 	}
 
@@ -83,7 +85,7 @@ func (uc *LeaderboardUseCase) GetGameLeaderboard(ctx context.Context, gameID str
 func (uc *LeaderboardUseCase) GetUserRank(ctx context.Context, gameID string, userID string) (*domain.LeaderboardEntry, error) {
 	entry, err := uc.leaderboardRepo.GetUserRank(ctx, gameID, userID)
 	if err != nil {
-		uc.logger.Errorf("Failed to get user rank: %v", err)
+		uc.logger.Errorf(ctx, "Failed to get user rank: %v", err)
 		return nil, response.NewInternalError("Failed to retrieve user rank", err)
 	}
 

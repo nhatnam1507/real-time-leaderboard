@@ -47,7 +47,7 @@ func main() {
 	// Initialize database
 	db, err := database.NewPostgres(cfg.Database, l)
 	if err != nil {
-		l.Errorf("Failed to connect to database: %v", err)
+		l.Errorf(context.TODO(), "Failed to connect to database: %v", err)
 		return
 	}
 	defer db.Close()
@@ -55,12 +55,12 @@ func main() {
 	// Initialize Redis
 	redisClient, err := redisInfra.NewClient(cfg.Redis, l)
 	if err != nil {
-		l.Errorf("Failed to connect to Redis: %v", err)
+		l.Errorf(context.TODO(), "Failed to connect to Redis: %v", err)
 		return
 	}
 	defer func() {
 		if err := redisClient.Close(); err != nil {
-			l.Errorf("Failed to close Redis connection: %v", err)
+			l.Errorf(context.TODO(), "Failed to close Redis connection: %v", err)
 		}
 	}()
 
@@ -107,9 +107,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		l.Infof("Server starting on %s", cfg.Server.GetAddr())
+		l.Infof(context.TODO(), "Server starting on %s", cfg.Server.GetAddr())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			l.Errorf("Failed to start server: %v", err)
+			l.Errorf(context.TODO(), "Failed to start server: %v", err)
 			os.Exit(1)
 		}
 	}()
@@ -119,17 +119,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	l.Info("Shutting down server...")
+	l.Info(context.TODO(), "Shutting down server...")
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		l.Errorf("Server forced to shutdown: %v", err)
+		l.Errorf(context.TODO(), "Server forced to shutdown: %v", err)
 	}
 
-	l.Info("Server exited")
+	l.Info(context.TODO(), "Server exited")
 }
 
 func setupRouter(
