@@ -1,3 +1,4 @@
+// Package application provides use cases for the score module.
 package application
 
 import (
@@ -5,7 +6,7 @@ import (
 	"encoding/json"
 
 	"real-time-leaderboard/internal/module/score/domain"
-	"real-time-leaderboard/internal/shared/errors"
+	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/logger"
 )
 
@@ -52,14 +53,14 @@ func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req Subm
 	// Save score to database
 	if err := uc.scoreRepo.Create(ctx, score); err != nil {
 		uc.logger.Errorf("Failed to create score: %v", err)
-		return nil, errors.NewInternalError("Failed to submit score", err)
+		return nil, response.NewInternalError("Failed to submit score", err)
 	}
 
 	// Update leaderboard in Redis (use highest score for leaderboard)
 	highestScore, err := uc.scoreRepo.GetHighestByUserIDAndGameID(ctx, userID, req.GameID)
 	if err != nil {
 		uc.logger.Errorf("Failed to get highest score: %v", err)
-		return nil, errors.NewInternalError("Failed to submit score", err)
+		return nil, response.NewInternalError("Failed to submit score", err)
 	}
 
 	if highestScore != nil {
@@ -107,7 +108,7 @@ func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID
 
 	if err != nil {
 		uc.logger.Errorf("Failed to get user scores: %v", err)
-		return nil, errors.NewInternalError("Failed to retrieve scores", err)
+		return nil, response.NewInternalError("Failed to retrieve scores", err)
 	}
 
 	return scores, nil

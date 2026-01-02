@@ -1,3 +1,4 @@
+// Package application provides use cases for the report module.
 package application
 
 import (
@@ -5,7 +6,7 @@ import (
 	"time"
 
 	"real-time-leaderboard/internal/module/report/domain"
-	"real-time-leaderboard/internal/shared/errors"
+	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/logger"
 )
 
@@ -53,7 +54,7 @@ func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlay
 
 	if err != nil {
 		uc.logger.Errorf("Failed to get top players: %v", err)
-		return nil, errors.NewInternalError("Failed to generate report", err)
+		return nil, response.NewInternalError("Failed to generate report", err)
 	}
 
 	total, err := uc.reportRepo.GetTotalPlayers(ctx, req.GameID)

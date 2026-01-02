@@ -1,4 +1,5 @@
-package http
+// Package rest provides REST API handlers for the report module.
+package rest
 
 import (
 	"strconv"

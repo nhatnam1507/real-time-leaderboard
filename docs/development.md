@@ -49,9 +49,9 @@ make start-dev
 make run
 # Or directly: ./scripts/run.sh all
 
-# Run linter and tests
+# Run linter (and tests when available)
 # - Runs golangci-lint on all code
-# - Runs all Go unit tests
+# - Tests will be included when testing infrastructure is added
 make check
 
 # Stop the full Docker Compose stack from 'run' target
@@ -136,7 +136,7 @@ The project includes utility scripts in the `scripts/` directory:
    ```bash
    make check
    ```
-   This runs linter and tests to ensure code quality.
+   This runs the linter to ensure code quality. (Tests will be added in the future)
 
 5. **Stopping services**:
    ```bash
@@ -151,19 +151,9 @@ The project includes utility scripts in the `scripts/` directory:
 
 ## Testing
 
-```bash
-# Run all tests (using make)
-make test
+**Note**: Testing infrastructure is not yet implemented. This section will be updated when tests are added.
 
-# Or using go directly
-go test ./...
-
-# Run tests with coverage
-make test-coverage
-
-# Run tests for a specific module
-go test ./internal/module/auth/...
-```
+Currently, `make check` runs the linter only. When tests are added, they will be included in the check command.
 
 ## Database Migrations
 

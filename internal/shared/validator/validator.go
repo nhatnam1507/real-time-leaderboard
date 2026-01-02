@@ -1,3 +1,4 @@
+// Package validator provides request validation functionality.
 package validator
 
 import (
@@ -6,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"real-time-leaderboard/internal/shared/errors"
+	"real-time-leaderboard/internal/shared/response"
 )
 
 var validate *validator.Validate
@@ -40,9 +41,9 @@ func formatValidationError(err error) error {
 			message := formatFieldError(fieldError)
 			messages = append(messages, message)
 		}
-		return errors.NewValidationError(strings.Join(messages, "; "), err)
+		return response.NewValidationError(strings.Join(messages, "; "), err)
 	}
-	return errors.NewValidationError("Validation failed", err)
+	return response.NewValidationError("Validation failed", err)
 }
 
 // formatFieldError formats a single field error

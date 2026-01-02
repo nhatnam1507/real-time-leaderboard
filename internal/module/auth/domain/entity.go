@@ -1,3 +1,4 @@
+// Package domain provides domain entities for the auth module.
 package domain
 
 import "time"

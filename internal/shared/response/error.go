@@ -1,4 +1,5 @@
-package errors
+// Package response provides HTTP response utilities and error handling.
+package response
 
 import (
 	"fmt"
@@ -9,13 +10,21 @@ import (
 type ErrorCode string
 
 const (
-	CodeValidation      ErrorCode = "VALIDATION_ERROR"
-	CodeNotFound        ErrorCode = "NOT_FOUND"
-	CodeUnauthorized    ErrorCode = "UNAUTHORIZED"
-	CodeForbidden       ErrorCode = "FORBIDDEN"
-	CodeConflict        ErrorCode = "CONFLICT"
-	CodeInternal        ErrorCode = "INTERNAL_ERROR"
-	CodeBadRequest      ErrorCode = "BAD_REQUEST"
+	// CodeValidation represents a validation error.
+	CodeValidation ErrorCode = "VALIDATION_ERROR"
+	// CodeNotFound represents a not found error.
+	CodeNotFound ErrorCode = "NOT_FOUND"
+	// CodeUnauthorized represents an unauthorized error.
+	CodeUnauthorized ErrorCode = "UNAUTHORIZED"
+	// CodeForbidden represents a forbidden error.
+	CodeForbidden ErrorCode = "FORBIDDEN"
+	// CodeConflict represents a conflict error.
+	CodeConflict ErrorCode = "CONFLICT"
+	// CodeInternal represents an internal server error.
+	CodeInternal ErrorCode = "INTERNAL_ERROR"
+	// CodeBadRequest represents a bad request error.
+	CodeBadRequest ErrorCode = "BAD_REQUEST"
+	// CodeTooManyRequests represents a too many requests error.
 	CodeTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 )
 
@@ -136,3 +145,4 @@ func AsAppError(err error) *AppError {
 	}
 	return NewInternalError("Internal server error", err)
 }
+

@@ -1,10 +1,12 @@
-package http
+// Package rest provides REST API handlers for the auth module.
+package rest
 
 import (
-	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/module/auth/application"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Handler handles HTTP requests for authentication

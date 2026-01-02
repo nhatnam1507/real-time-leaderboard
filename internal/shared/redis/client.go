@@ -1,3 +1,4 @@
+// Package redis provides Redis client management.
 package redis
 
 import (

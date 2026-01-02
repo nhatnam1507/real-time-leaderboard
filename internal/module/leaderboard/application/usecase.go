@@ -1,11 +1,12 @@
+// Package application provides use cases for the leaderboard module.
 package application
 
 import (
 	"context"
 
 	"real-time-leaderboard/internal/module/leaderboard/domain"
-	"real-time-leaderboard/internal/shared/errors"
 	"real-time-leaderboard/internal/shared/logger"
+	"real-time-leaderboard/internal/shared/response"
 )
 
 // LeaderboardUseCase handles leaderboard use cases
@@ -34,7 +35,7 @@ func (uc *LeaderboardUseCase) GetGlobalLeaderboard(ctx context.Context, limit in
 	entries, err := uc.leaderboardRepo.GetTopPlayers(ctx, "global", limit)
 	if err != nil {
 		uc.logger.Errorf("Failed to get global leaderboard: %v", err)
-		return nil, errors.NewInternalError("Failed to retrieve leaderboard", err)
+		return nil, response.NewInternalError("Failed to retrieve leaderboard", err)
 	}
 
 	total, err := uc.leaderboardRepo.GetTotalPlayers(ctx, "global")
@@ -62,7 +63,7 @@ func (uc *LeaderboardUseCase) GetGameLeaderboard(ctx context.Context, gameID str
 	entries, err := uc.leaderboardRepo.GetTopPlayers(ctx, gameID, limit)
 	if err != nil {
 		uc.logger.Errorf("Failed to get game leaderboard: %v", err)
-		return nil, errors.NewInternalError("Failed to retrieve leaderboard", err)
+		return nil, response.NewInternalError("Failed to retrieve leaderboard", err)
 	}
 
 	total, err := uc.leaderboardRepo.GetTotalPlayers(ctx, gameID)
@@ -83,11 +84,11 @@ func (uc *LeaderboardUseCase) GetUserRank(ctx context.Context, gameID string, us
 	entry, err := uc.leaderboardRepo.GetUserRank(ctx, gameID, userID)
 	if err != nil {
 		uc.logger.Errorf("Failed to get user rank: %v", err)
-		return nil, errors.NewInternalError("Failed to retrieve user rank", err)
+		return nil, response.NewInternalError("Failed to retrieve user rank", err)
 	}
 
 	if entry == nil {
-		return nil, errors.NewNotFoundError("User not found in leaderboard")
+		return nil, response.NewNotFoundError("User not found in leaderboard")
 	}
 
 	return entry, nil

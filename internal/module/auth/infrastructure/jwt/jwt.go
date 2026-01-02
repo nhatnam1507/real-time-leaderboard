@@ -1,3 +1,4 @@
+// Package jwt provides JWT token management functionality.
 package jwt
 
 import (
@@ -9,8 +10,8 @@ import (
 	"real-time-leaderboard/internal/module/auth/domain"
 )
 
-// JWTManager handles JWT token operations
-type JWTManager struct {
+// Manager handles JWT token operations
+type Manager struct {
 	secretKey     string
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
@@ -22,9 +23,9 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// NewJWTManager creates a new JWT manager
-func NewJWTManager(secretKey string, accessExpiry, refreshExpiry time.Duration) *JWTManager {
-	return &JWTManager{
+// NewManager creates a new JWT manager
+func NewManager(secretKey string, accessExpiry, refreshExpiry time.Duration) *Manager {
+	return &Manager{
 		secretKey:     secretKey,
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
@@ -32,7 +33,7 @@ func NewJWTManager(secretKey string, accessExpiry, refreshExpiry time.Duration) 
 }
 
 // GenerateTokenPair generates access and refresh tokens
-func (m *JWTManager) GenerateTokenPair(userID string) (*domain.TokenPair, error) {
+func (m *Manager) GenerateTokenPair(userID string) (*domain.TokenPair, error) {
 	accessToken, accessExpiresIn, err := m.generateToken(userID, m.accessExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
@@ -51,7 +52,7 @@ func (m *JWTManager) GenerateTokenPair(userID string) (*domain.TokenPair, error)
 }
 
 // generateToken generates a JWT token
-func (m *JWTManager) generateToken(userID string, expiry time.Duration) (string, time.Duration, error) {
+func (m *Manager) generateToken(userID string, expiry time.Duration) (string, time.Duration, error) {
 	now := time.Now()
 	expiresAt := now.Add(expiry)
 
@@ -74,7 +75,7 @@ func (m *JWTManager) generateToken(userID string, expiry time.Duration) (string,
 }
 
 // ValidateToken validates a JWT token and returns the user ID
-func (m *JWTManager) ValidateToken(tokenString string) (string, error) {
+func (m *Manager) ValidateToken(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

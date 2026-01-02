@@ -1,3 +1,4 @@
+// Package database provides database connection management.
 package database
 
 import (
@@ -25,7 +26,15 @@ func NewPostgres(cfg config.DatabaseConfig, l *logger.Logger) (*Postgres, error)
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
+	// Validate and convert int to int32 with overflow protection
+	if cfg.MaxConnections > 2147483647 || cfg.MaxConnections < 0 {
+		return nil, fmt.Errorf("MaxConnections value %d is out of int32 range", cfg.MaxConnections)
+	}
 	poolConfig.MaxConns = int32(cfg.MaxConnections)
+
+	if cfg.MaxIdleConns > 2147483647 || cfg.MaxIdleConns < 0 {
+		return nil, fmt.Errorf("MaxIdleConns value %d is out of int32 range", cfg.MaxIdleConns)
+	}
 	poolConfig.MinConns = int32(cfg.MaxIdleConns)
 	poolConfig.MaxConnLifetime = cfg.ConnMaxLifetime
 	poolConfig.HealthCheckPeriod = 1 * time.Minute

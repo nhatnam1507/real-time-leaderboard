@@ -1,3 +1,4 @@
+// Package repository provides repository implementations for the report module.
 package repository
 
 import (
@@ -8,6 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"real-time-leaderboard/internal/module/report/domain"
 )
+
+const globalGameID = "global"
 
 // RedisReportRepository implements ReportRepository using Redis
 type RedisReportRepository struct {
@@ -21,7 +24,7 @@ func NewRedisReportRepository(client *redis.Client) *RedisReportRepository {
 
 // getKey returns the Redis key for a leaderboard
 func (r *RedisReportRepository) getKey(gameID string) string {
-	if gameID == "" || gameID == "global" {
+	if gameID == "" || gameID == globalGameID {
 		return "leaderboard:global"
 	}
 	return fmt.Sprintf("leaderboard:%s", gameID)
@@ -58,7 +61,7 @@ func (r *RedisReportRepository) GetTopPlayers(ctx context.Context, gameID string
 
 // GetTopPlayersByDateRange retrieves top players (Redis doesn't support date ranges directly,
 // so we return current top players. For historical data, use PostgreSQL)
-func (r *RedisReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, startDate, endDate time.Time, limit int64) ([]domain.TopPlayer, error) {
+func (r *RedisReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, _ /* startDate */, _ /* endDate */ time.Time, limit int64) ([]domain.TopPlayer, error) {
 	// Redis sorted sets don't support date ranges directly
 	// For now, return current top players
 	// In a real implementation, you might query PostgreSQL for historical data

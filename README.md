@@ -109,7 +109,7 @@ make stop
 # Remove all Docker Compose stacks, volumes, and related files
 make clean
 
-# Run linter and tests
+# Run linter (tests will be added in the future)
 make check
 ```
 

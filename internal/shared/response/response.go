@@ -1,9 +1,8 @@
+// Package response provides HTTP response utilities and error handling.
 package response
 
 import (
 	"net/http"
-
-	"real-time-leaderboard/internal/shared/errors"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,7 +50,7 @@ func SuccessWithStatus(c *gin.Context, status int, data interface{}, message str
 
 // Error sends an error response
 func Error(c *gin.Context, err error) {
-	appErr := errors.AsAppError(err)
+	appErr := AsAppError(err)
 
 	c.JSON(appErr.HTTPStatus, Response{
 		Success: false,
@@ -63,7 +62,7 @@ func Error(c *gin.Context, err error) {
 }
 
 // ErrorWithStatus sends an error response with custom status code
-func ErrorWithStatus(c *gin.Context, status int, code errors.ErrorCode, message string) {
+func ErrorWithStatus(c *gin.Context, status int, code ErrorCode, message string) {
 	c.JSON(status, Response{
 		Success: false,
 		Error: &ErrorInfo{

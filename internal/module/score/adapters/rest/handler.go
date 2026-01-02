@@ -1,11 +1,11 @@
-package http
+// Package rest provides REST API handlers for the score module.
+package rest
 
 import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/module/score/application"
-	"real-time-leaderboard/internal/shared/errors"
 	"real-time-leaderboard/internal/shared/middleware"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
@@ -38,7 +38,7 @@ func NewHandler(scoreUseCase *application.ScoreUseCase) *Handler {
 func (h *Handler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		response.Error(c, errors.NewUnauthorizedError("User ID not found in context"))
+		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *Handler) SubmitScore(c *gin.Context) {
 func (h *Handler) GetUserScores(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		response.Error(c, errors.NewUnauthorizedError("User ID not found in context"))
+		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
 		return
 	}
 

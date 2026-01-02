@@ -1,4 +1,5 @@
-package http
+// Package rest provides REST API handlers for the leaderboard module.
+package rest
 
 import (
 	"strconv"

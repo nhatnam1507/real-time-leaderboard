@@ -1,3 +1,4 @@
+// Package domain provides domain entities for the leaderboard module.
 package domain
 
 // LeaderboardEntry represents a leaderboard entry

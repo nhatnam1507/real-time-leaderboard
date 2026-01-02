@@ -1,3 +1,4 @@
+// Package domain provides domain entities for the score module.
 package domain
 
 import (

@@ -1,3 +1,4 @@
+// Package repository provides repository implementations for the report module.
 package repository
 
 import (

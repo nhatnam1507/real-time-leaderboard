@@ -1,3 +1,4 @@
+// Package middleware provides HTTP middleware for the application.
 package middleware
 
 import (
@@ -5,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"real-time-leaderboard/internal/shared/errors"
 	"real-time-leaderboard/internal/shared/response"
 )
 
@@ -27,7 +27,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			response.Error(c, errors.NewUnauthorizedError("Authorization header is required"))
+			response.Error(c, response.NewUnauthorizedError("Authorization header is required"))
 			c.Abort()
 			return
 		}
@@ -35,7 +35,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		// Extract token from "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			response.Error(c, errors.NewUnauthorizedError("Invalid authorization header format"))
+			response.Error(c, response.NewUnauthorizedError("Invalid authorization header format"))
 			c.Abort()
 			return
 		}
@@ -43,7 +43,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		token := parts[1]
 		userID, err := m.validateToken(c.Request.Context(), token)
 		if err != nil {
-			response.Error(c, errors.NewUnauthorizedError("Invalid or expired token"))
+			response.Error(c, response.NewUnauthorizedError("Invalid or expired token"))
 			c.Abort()
 			return
 		}
