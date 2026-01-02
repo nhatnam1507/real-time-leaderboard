@@ -3,8 +3,9 @@ package response
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/shared/errors"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Response represents a standard API response
@@ -13,12 +14,21 @@ type Response struct {
 	Data    interface{} `json:"data,omitempty"`
 	Error   *ErrorInfo  `json:"error,omitempty"`
 	Message string      `json:"message,omitempty"`
+	Meta    interface{} `json:"meta,omitempty"`
 }
 
 // ErrorInfo represents error information in response
 type ErrorInfo struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// Pagination represents pagination information (placeholder for future use)
+type Pagination struct {
+	Page       int   `json:"page,omitempty"`
+	Limit      int   `json:"limit,omitempty"`
+	Total      int64 `json:"total,omitempty"`
+	TotalPages int   `json:"total_pages,omitempty"`
 }
 
 // Success sends a successful response
@@ -60,6 +70,16 @@ func ErrorWithStatus(c *gin.Context, status int, code errors.ErrorCode, message 
 			Code:    string(code),
 			Message: message,
 		},
+	})
+}
+
+// SuccessWithMeta sends a successful response with custom metadata
+func SuccessWithMeta(c *gin.Context, data interface{}, message string, meta interface{}) {
+	c.JSON(http.StatusOK, Response{
+		Success: true,
+		Data:    data,
+		Message: message,
+		Meta:    meta,
 	})
 }
 

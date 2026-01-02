@@ -99,7 +99,7 @@ stop_dependency_services() {
 # Function to start development mode
 start_development_mode() {
     # Set up signal traps for cleanup
-    trap stop_dependency_services SIGINT SIGTERM
+    trap stop_dependency_services SIGHUP SIGINT SIGTERM
     
     echo "Starting development environment..."
     

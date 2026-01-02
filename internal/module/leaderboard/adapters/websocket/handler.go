@@ -1,14 +1,16 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -94,8 +96,12 @@ func (h *Hub) Run() {
 
 // broadcastLeaderboard broadcasts leaderboard updates
 func (h *Hub) broadcastLeaderboard() {
+	// Create context with timeout for Redis operations
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Get global leaderboard
-	leaderboard, err := h.leaderboardUseCase.GetGlobalLeaderboard(nil, 10)
+	leaderboard, err := h.leaderboardUseCase.GetGlobalLeaderboard(ctx, 10)
 	if err != nil {
 		log.Printf("Error getting leaderboard: %v", err)
 		return

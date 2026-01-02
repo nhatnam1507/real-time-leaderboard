@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // RedisLeaderboardRepository implements LeaderboardRepository using Redis sorted sets

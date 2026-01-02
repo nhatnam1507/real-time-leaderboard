@@ -108,6 +108,7 @@ func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
 }
 
 // WithRequestID adds request ID to the logger
+// The value is an OpenTelemetry trace ID, but we use "request_id" terminology for clarity
 func (l *Logger) WithRequestID(requestID string) *Logger {
 	return &Logger{logger: l.logger.With().Str("request_id", requestID).Logger()}
 }

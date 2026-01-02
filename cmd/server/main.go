@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/config"
 	authHTTP "real-time-leaderboard/internal/module/auth/adapters/http"
 	authApp "real-time-leaderboard/internal/module/auth/application"
@@ -26,9 +25,13 @@ import (
 	scoreApp "real-time-leaderboard/internal/module/score/application"
 	scoreInfra "real-time-leaderboard/internal/module/score/infrastructure/repository"
 	"real-time-leaderboard/internal/shared/database"
+	"real-time-leaderboard/internal/shared/errors"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
 	redisInfra "real-time-leaderboard/internal/shared/redis"
+	"real-time-leaderboard/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -143,11 +146,20 @@ func setupRouter(
 
 	router := gin.New()
 
-	// Middleware
+	// Middleware (order matters!)
+	// 1. Recovery - First to catch panics from all other middleware
+	// 2. RequestID - Early to generate ID for all subsequent middleware and logs
+	// 3. CORS - After RequestID so responses include request ID, but early for OPTIONS handling
+	// 4. RequestLogger - Last to log after request processing completes
 	router.Use(middleware.Recovery(l))
 	router.Use(middleware.RequestID())
-	router.Use(middleware.RequestLogger(l))
 	router.Use(middleware.CORS())
+	router.Use(middleware.RequestLogger(l))
+
+	// 404 Not Found handler
+	router.NoRoute(func(c *gin.Context) {
+		response.ErrorWithStatus(c, http.StatusNotFound, errors.CodeNotFound, "Route not found")
+	})
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
