@@ -80,7 +80,7 @@ The server will start on `http://localhost:8080`
 
 For detailed documentation, see the [docs](./docs/) folder:
 
-- **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and project structure
+- **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and architectural principles
 - **[Modules](./docs/modules.md)** - Detailed module documentation
 - **[API Documentation](./docs/api.md)** - Complete API reference
 - **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
@@ -119,20 +119,46 @@ See [Development Guide](./docs/development.md) for complete list of commands.
 
 ```
 real-time-leaderboard/
-├── cmd/server/          # Application entry point
+├── cmd/
+│   └── server/
+│       └── main.go                 # Application entry point
 ├── internal/
-│   ├── config/         # Configuration management
-│   ├── shared/         # Shared utilities and infrastructure
-│   └── module/         # Self-contained modules (auth, score, leaderboard, report)
-├── docs/               # Documentation
-├── scripts/            # Utility scripts (init.sh, run.sh, migrate.sh)
-└── docker/             # Docker configuration
-    ├── Dockerfile                    # Production Docker image
-    ├── docker-compose.deps.yml       # Dependency services (postgres, redis)
-    └── docker-compose.yml            # Full compose file (includes deps + app)
+│   ├── config/                     # Configuration management
+│   │   └── config.go
+│   ├── shared/                     # Shared utilities and infrastructure
+│   │   ├── response/               # API response helpers and error definitions
+│   │   ├── middleware/             # HTTP middleware
+│   │   ├── logger/                 # Logger implementation
+│   │   ├── validator/              # Request validation
+│   │   ├── database/               # Database connections
+│   │   │   └── migrations/        # Database migrations
+│   │   └── redis/                  # Redis connections
+│   └── module/                     # Self-contained modules
+│       ├── auth/                   # Auth Module
+│       │   ├── domain/            # Domain layer
+│       │   ├── application/       # Application layer
+│       │   ├── adapters/          # Adapters layer
+│       │   └── infrastructure/    # Infrastructure layer
+│       ├── score/                  # Score Module
+│       ├── leaderboard/            # Leaderboard Module
+│       └── report/                 # Report Module
+├── docs/                           # Documentation
+├── scripts/                        # Utility scripts
+│   ├── init.sh                    # Initialize development environment
+│   ├── run.sh                     # Application startup script (dev/all modes)
+│   └── migrate.sh                 # Database migration tool
+├── docker/
+│   ├── Dockerfile                 # Production Docker image
+│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
+│   └── docker-compose.yml         # Full compose file (includes deps + app)
+├── .air.toml                      # Air configuration for hot reload
+├── .golangci.yml                  # golangci-lint configuration
+├── go.mod
+├── Makefile                       # Development commands
+└── README.md
 ```
 
-For detailed project structure, see [Architecture Documentation](./docs/architecture.md).
+For architecture explanations, diagrams, and data flows, see [Architecture Documentation](./docs/architecture.md).
 
 ## License
 

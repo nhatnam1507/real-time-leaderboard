@@ -1,11 +1,13 @@
+// Package middleware provides HTTP middleware functions for authentication and request handling.
 package middleware
 
 import (
 	"context"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
 )
 
 const (

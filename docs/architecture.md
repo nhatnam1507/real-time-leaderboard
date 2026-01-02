@@ -54,8 +54,7 @@ graph TB
     end
     
     subgraph shared[Shared Components]
-        Errors[Error Definitions]
-        Response[Response Helpers]
+        Response[Response Helpers & Errors]
         Middleware[Middleware]
         Logger[Logger]
         Validator[Validator]
@@ -115,10 +114,10 @@ graph TB
     LeaderboardAdapter --> Middleware
     ReportAdapter --> Middleware
     
-    AuthApplication --> Errors
-    ScoreApplication --> Errors
-    LeaderboardApplication --> Errors
-    ReportApplication --> Errors
+    AuthApplication --> Response
+    ScoreApplication --> Response
+    LeaderboardApplication --> Response
+    ReportApplication --> Response
     
     AuthAdapter --> Response
     ScoreAdapter --> Response
@@ -160,45 +159,39 @@ sequenceDiagram
     LeaderboardApplication->>WSClient: Broadcast updated leaderboard
 ```
 
-## Project Structure
+## Architecture Principles
 
-```
-real-time-leaderboard/
-├── cmd/
-│   └── server/
-│       └── main.go                 # Application entry point
-├── internal/
-│   ├── config/                     # Configuration management
-│   │   └── config.go
-│   ├── shared/                     # Shared utilities and infrastructure
-│   │   ├── errors/                # Error definitions
-│   │   ├── response/               # API response helpers
-│   │   ├── middleware/             # HTTP middleware
-│   │   ├── logger/                 # Logger implementation
-│   │   ├── validator/              # Request validation
-│   │   ├── database/               # Database connections
-│   │   │   └── migrations/        # Database migrations
-│   │   └── redis/                  # Redis connections
-│   └── module/                     # Self-contained modules
-│       ├── auth/                   # Auth Module
-│       │   ├── domain/            # Domain layer
-│       │   ├── application/       # Application layer
-│       │   ├── adapters/          # Adapters layer
-│       │   └── infrastructure/    # Infrastructure layer
-│       ├── score/                  # Score Module
-│       ├── leaderboard/            # Leaderboard Module
-│       └── report/                 # Report Module
-├── scripts/                        # Utility scripts
-│   ├── init.sh                    # Initialize development environment
-│   ├── run.sh                     # Application startup script (dev/all modes)
-│   └── migrate.sh                 # Database migration tool
-├── docker/
-│   ├── Dockerfile                 # Production Docker image
-│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
-│   └── docker-compose.yml         # Full compose file (includes deps + app)
-├── .env.example
-├── go.mod
-├── Makefile                       # Development commands
-└── README.md
-```
+### Clean Architecture Layers
+
+Each module follows Clean Architecture with four distinct layers:
+
+1. **Domain Layer** (`domain/`): Contains core business entities and repository interfaces. This layer has no external dependencies and represents the business rules.
+
+2. **Application Layer** (`application/`): Contains use cases that orchestrate business logic. It depends only on the domain layer and defines interfaces for infrastructure.
+
+3. **Adapters Layer** (`adapters/`): Contains HTTP/WebSocket handlers that translate external requests into domain entities and use cases. This is the input adapter layer.
+
+4. **Infrastructure Layer** (`infrastructure/`): Contains implementations of repositories and external service integrations (database, Redis, etc.). This is the output adapter layer.
+
+### Module Independence
+
+Each module (auth, score, leaderboard, report) is self-contained with its own:
+- Domain entities and business rules
+- Use cases and application logic
+- HTTP/WebSocket adapters
+- Infrastructure implementations
+
+This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
+
+### Shared Components
+
+The `internal/shared/` directory contains cross-cutting concerns used by all modules:
+- **Response**: Standardized API responses and error handling
+- **Middleware**: HTTP middleware (authentication, logging, recovery)
+- **Logger**: Centralized logging
+- **Validator**: Request validation utilities
+- **Database**: PostgreSQL connection and migrations
+- **Redis**: Redis client connection
+
+These shared components follow the dependency inversion principle - modules depend on abstractions, not concrete implementations.
 
