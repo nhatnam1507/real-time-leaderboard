@@ -13,16 +13,14 @@ A high-performance, modular real-time leaderboard system built with Go, followin
 - **Clean Architecture**: Modular, testable, and maintainable code structure
 - **Microservice Ready**: Each module is self-contained and can be extracted to a microservice
 
-## Quick Start
-
-### Prerequisites
+## Prerequisites
 
 - Go 1.21 or higher
 - Docker and Docker Compose
 - PostgreSQL 15+ (if running locally)
 - Redis 7+ (if running locally)
 
-### Installation
+## Installation
 
 1. **Clone the repository**:
 ```bash
@@ -37,7 +35,11 @@ make init
 
 This will install all required tools (golangci-lint, migrate, air) and verify Docker/Docker Compose are available.
 
-3. **Start development environment** (recommended for development):
+## Quick Start
+
+### Development Mode (Recommended)
+
+Start the development environment with hot reload:
 
 ```bash
 make start-dev
@@ -57,7 +59,9 @@ This will:
 
 The server will start on `http://localhost:8080`
 
-4. **Or run full Docker Compose setup** (for production-like testing):
+### Production-like Mode
+
+Run full Docker Compose setup (all services in containers):
 
 ```bash
 make run
@@ -75,45 +79,6 @@ This will:
 - Start the application in a container
 
 The server will start on `http://localhost:8080`
-
-## Documentation
-
-For detailed documentation, see the [docs](./docs/) folder:
-
-- **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and architectural principles
-- **[Modules](./docs/modules.md)** - Detailed module documentation
-- **[API Documentation](./docs/api.md)** - Complete API reference
-- **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
-- **[Microservice Migration](./docs/microservice-migration.md)** - Guide for extracting modules to microservices
-- **[Redis Strategy](./docs/redis-strategy.md)** - Redis sorted sets implementation details
-
-## Common Commands
-
-```bash
-# Show all available commands
-make help
-
-# Initialize development environment (install tools)
-make init
-
-# Start development environment (deps + app with hot reload)
-make start-dev
-# Press Ctrl+C to stop and cleanup dependency services
-
-# Run full Docker Compose setup (all services in containers)
-make run
-
-# Stop the full Docker Compose stack from 'run' target (preserves data/volumes)
-make stop
-
-# Remove all Docker Compose stacks, volumes, and related files
-make clean
-
-# Run linter (tests will be added in the future)
-make check
-```
-
-See [Development Guide](./docs/development.md) for complete list of commands.
 
 ## Project Structure
 
@@ -158,12 +123,49 @@ real-time-leaderboard/
 └── README.md
 ```
 
-For architecture explanations, diagrams, and data flows, see [Architecture Documentation](./docs/architecture.md).
+## Documentation
 
-## License
+For detailed documentation, see the [docs](./docs/) folder:
 
-MIT
+- **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and architectural principles
+- **[Modules](./docs/modules.md)** - Detailed module documentation
+- **[API Documentation](./docs/api.md)** - Complete API reference
+- **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
+- **[Microservice Migration](./docs/microservice-migration.md)** - Guide for extracting modules to microservices
+- **[Redis Strategy](./docs/redis-strategy.md)** - Redis sorted sets implementation details
+
+## Common Commands
+
+```bash
+# Show all available commands
+make help
+
+# Initialize development environment (install tools)
+make init
+
+# Start development environment (deps + app with hot reload)
+make start-dev
+# Press Ctrl+C to stop and cleanup dependency services
+
+# Run full Docker Compose setup (all services in containers)
+make run
+
+# Stop the full Docker Compose stack from 'run' target (preserves data/volumes)
+make stop
+
+# Remove all Docker Compose stacks, volumes, and related files
+make clean
+
+# Run linter (tests will be added in the future)
+make check
+```
+
+See [Development Guide](./docs/development.md) for complete list of commands.
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT
