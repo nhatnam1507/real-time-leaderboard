@@ -205,7 +205,7 @@ The Air configuration is automatically used when running `make start-dev` or `./
 
 ## Technology Stack
 
-- **Language**: Go 1.21+
+- **Language**: Go 1.25.5
 - **Web Framework**: Gin
 - **Database**: PostgreSQL 15+
 - **Cache/Ranking**: Redis 7+ (sorted sets)

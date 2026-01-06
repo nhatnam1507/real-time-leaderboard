@@ -15,7 +15,7 @@ A high-performance, modular real-time leaderboard system built with Go, followin
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.25.5
 - Docker and Docker Compose
 - PostgreSQL 15+ (if running locally)
 - Redis 7+ (if running locally)
