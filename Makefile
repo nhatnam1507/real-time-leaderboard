@@ -45,8 +45,10 @@ ut:
 	@go test ./...
 	@echo "Unit tests completed successfully"
 
-## check: Run both linter and unit tests
+## check: Run linter, unit tests, and workflow validation locally
 check: lint ut
+	@echo "Validating workflow syntax..."
+	@./scripts/validate-workflows.sh
 	@echo "All checks completed successfully"
 
 ## stop: Stop full compose stack from 'run' target. Containers removed, volumes/data preserved

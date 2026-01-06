@@ -33,7 +33,10 @@ cd real-time-leaderboard
 make init
 ```
 
-This will install all required tools (golangci-lint, migrate, air) and verify Docker/Docker Compose are available.
+This will:
+- Install all required tools (golangci-lint, migrate, air, act)
+- Configure git hooks automatically
+- Verify Docker/Docker Compose are available
 
 ## Quick Start
 
@@ -111,7 +114,16 @@ real-time-leaderboard/
 ├── scripts/                        # Utility scripts
 │   ├── init.sh                    # Initialize development environment
 │   ├── run.sh                     # Application startup script (dev/all modes)
-│   └── migrate.sh                 # Database migration tool
+│   ├── migrate.sh                 # Database migration tool
+│   └── validate-workflows.sh      # GitHub Actions workflow validation
+├── .githooks/                     # Git hooks (version controlled)
+│   └── pre-push                   # Pre-push hook for code quality checks
+├── .github/
+│   ├── workflows/                 # GitHub Actions workflows
+│   │   ├── pr.yml                 # PR workflow (lint + unit tests)
+│   │   └── ci.yml                 # CI workflow (lint + unit tests + dockerize)
+│   └── actions/                   # Reusable GitHub Actions
+│       └── init/                  # Init action (Go setup + make init)
 ├── docker/
 │   ├── Dockerfile                 # Production Docker image
 │   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
@@ -156,7 +168,13 @@ make stop
 # Remove all Docker Compose stacks, volumes, and related files
 make clean
 
-# Run linter (tests will be added in the future)
+# Run linter
+make lint
+
+# Run unit tests
+make ut
+
+# Run all checks (lint + unit tests + workflow validation)
 make check
 ```
 

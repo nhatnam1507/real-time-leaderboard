@@ -1,12 +1,9 @@
 name: 'Initialize Environment'
-description: 'Checkout code, set up Go environment, and run make init'
+description: 'Set up Go environment and run make init'
 
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v4
-      shell: bash
-
     - name: Set up Go
       uses: actions/setup-go@v4
       with:

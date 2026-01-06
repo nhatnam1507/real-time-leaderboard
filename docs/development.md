@@ -26,7 +26,8 @@ The project includes a simplified Makefile with essential commands for developme
 make help
 
 # Initialize development environment
-# - Installs golangci-lint, migrate tool, and air (if missing)
+# - Installs golangci-lint, migrate tool, air, and act (if missing)
+# - Configures git hooks automatically (uses .githooks directory)
 # - Verifies Docker and Docker Compose are available
 # - Downloads Go dependencies
 # This is automatically run before other targets
@@ -49,9 +50,16 @@ make start-dev
 make run
 # Or directly: ./scripts/run.sh all
 
-# Run linter (and tests when available)
+# Run linter
 # - Runs golangci-lint on all code
-# - Tests will be included when testing infrastructure is added
+make lint
+
+# Run unit tests
+# - Runs all Go unit tests
+make ut
+
+# Run all checks
+# - Runs linter, unit tests, and workflow validation
 make check
 
 # Stop the full Docker Compose stack from 'run' target
@@ -105,9 +113,14 @@ The project includes utility scripts in the `scripts/` directory:
   - **Can be run from any directory** - paths are resolved relative to script location
 
 - **`init.sh`**: Development environment initialization
-  - Installs required tools (golangci-lint, migrate, air, wait4x)
+  - Installs required tools (golangci-lint, migrate, air, wait4x, act)
+  - Configures git hooks automatically (uses .githooks directory)
   - Verifies Docker/Docker Compose availability
   - Downloads Go dependencies
+
+- **`validate-workflows.sh`**: GitHub Actions workflow validation
+  - Validates workflow YAML syntax using act
+  - Used automatically by `make check`
 
 ### Development Workflow
 
@@ -136,7 +149,7 @@ The project includes utility scripts in the `scripts/` directory:
    ```bash
    make check
    ```
-   This runs the linter to ensure code quality. (Tests will be added in the future)
+   This runs linter, unit tests, and workflow validation. A pre-push git hook automatically runs `make check` before pushing.
 
 5. **Stopping services**:
    ```bash
@@ -151,9 +164,32 @@ The project includes utility scripts in the `scripts/` directory:
 
 ## Testing
 
-**Note**: Testing infrastructure is not yet implemented. This section will be updated when tests are added.
+Run unit tests:
+```bash
+make ut
+```
 
-Currently, `make check` runs the linter only. When tests are added, they will be included in the check command.
+The `make check` command runs linter, unit tests, and workflow validation together.
+
+## Git Hooks
+
+Git hooks are automatically configured when you run `make init`. The hooks are version controlled in `.githooks/` directory.
+
+- **Pre-push hook**: Automatically runs `make check` before allowing push to remote repository
+- To bypass (not recommended): `git push --no-verify`
+
+## CI/CD
+
+The project includes GitHub Actions workflows:
+
+- **PR Workflow** (`.github/workflows/pr.yml`): Runs on pull requests
+  - Lint and unit tests in parallel
+  
+- **CI Workflow** (`.github/workflows/ci.yml`): Runs on pushes to main
+  - Lint and unit tests in parallel
+  - Docker image build after checks pass
+
+Workflow syntax is validated automatically as part of `make check`.
 
 ## Database Migrations
 
