@@ -1,4 +1,4 @@
-.PHONY: help init start-dev run check stop clean
+.PHONY: help init start-dev run check lint ut stop clean
 
 # Variables
 COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
@@ -31,13 +31,22 @@ run:
 	@SILENT=1 ./scripts/init.sh
 	@./scripts/run.sh all
 
-## check: Run linter (and tests when available - golangci-lint and go test)
-check:
+## lint: Run linter (golangci-lint)
+lint:
 	@SILENT=1 ./scripts/init.sh
 	@echo "Running linter..."
 	@golangci-lint run ./...
-	@echo "Running tests (if any)..."
-	@go test ./... 2>&1 || true
+	@echo "Linter completed successfully"
+
+## ut: Run unit tests
+ut:
+	@SILENT=1 ./scripts/init.sh
+	@echo "Running unit tests..."
+	@go test ./...
+	@echo "Unit tests completed successfully"
+
+## check: Run both linter and unit tests
+check: lint ut
 	@echo "All checks completed successfully"
 
 ## stop: Stop full compose stack from 'run' target. Containers removed, volumes/data preserved
