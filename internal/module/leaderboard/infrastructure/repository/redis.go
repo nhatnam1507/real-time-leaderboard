@@ -28,27 +28,34 @@ func (r *RedisLeaderboardRepository) getKey(gameID string) string {
 	return fmt.Sprintf("leaderboard:%s", gameID)
 }
 
-// GetTopPlayers retrieves the top N players from a leaderboard
-func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, gameID string, limit int64) ([]domain.LeaderboardEntry, error) {
+// GetTopPlayers retrieves the top N players from a leaderboard with offset support
+func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, gameID string, limit, offset int64) ([]domain.LeaderboardEntry, error) {
 	key := r.getKey(gameID)
 
-	// Get top players (highest scores first)
-	results, err := r.client.ZRevRangeWithScores(ctx, key, 0, limit-1).Result()
+	// Calculate Redis range: start = offset, stop = offset + limit - 1
+	start := offset
+	stop := offset + limit - 1
+
+	// Get top players (highest scores first) with offset
+	results, err := r.client.ZRevRangeWithScores(ctx, key, start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top players: %w", err)
 	}
 
 	entries := make([]domain.LeaderboardEntry, 0, len(results))
-	for rank, result := range results {
+	for i, result := range results {
 		userID, ok := result.Member.(string)
 		if !ok {
 			continue
 		}
 
+		// Rank is 1-indexed and accounts for offset
+		rank := offset + int64(i) + 1
+
 		entries = append(entries, domain.LeaderboardEntry{
 			UserID: userID,
 			Score:  int64(result.Score),
-			Rank:   int64(rank + 1), // Rank is 1-indexed
+			Rank:   rank,
 		})
 	}
 

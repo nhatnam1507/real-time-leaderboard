@@ -35,7 +35,7 @@ run:
 lint:
 	@SILENT=1 ./scripts/init.sh
 	@echo "Running linter..."
-	@golangci-lint run ./...
+	@golangci-lint run ./cmd/... ./internal/...
 	@echo "Linter completed successfully"
 
 ## ut: Run unit tests
@@ -44,6 +44,12 @@ ut:
 	@echo "Running unit tests..."
 	@go test ./...
 	@echo "Unit tests completed successfully"
+
+## swagger: Generate Swagger documentation
+swagger:
+	@echo "Generating Swagger documentation..."
+	@go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/server/main.go -o docs --parseInternal
+	@echo "✓ Swagger documentation generated"
 
 ## check: Run linter, unit tests, and workflow validation locally
 check: lint ut

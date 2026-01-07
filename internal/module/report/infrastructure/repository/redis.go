@@ -30,27 +30,34 @@ func (r *RedisReportRepository) getKey(gameID string) string {
 	return fmt.Sprintf("leaderboard:%s", gameID)
 }
 
-// GetTopPlayers retrieves the top N players from a leaderboard
-func (r *RedisReportRepository) GetTopPlayers(ctx context.Context, gameID string, limit int64) ([]domain.TopPlayer, error) {
+// GetTopPlayers retrieves the top N players from a leaderboard with offset support
+func (r *RedisReportRepository) GetTopPlayers(ctx context.Context, gameID string, limit, offset int64) ([]domain.TopPlayer, error) {
 	key := r.getKey(gameID)
 
-	// Get top players (highest scores first)
-	results, err := r.client.ZRevRangeWithScores(ctx, key, 0, limit-1).Result()
+	// Calculate Redis range: start = offset, stop = offset + limit - 1
+	start := offset
+	stop := offset + limit - 1
+
+	// Get top players (highest scores first) with offset
+	results, err := r.client.ZRevRangeWithScores(ctx, key, start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top players: %w", err)
 	}
 
 	players := make([]domain.TopPlayer, 0, len(results))
-	for rank, result := range results {
+	for i, result := range results {
 		userID, ok := result.Member.(string)
 		if !ok {
 			continue
 		}
 
+		// Rank is 1-indexed and accounts for offset
+		rank := offset + int64(i) + 1
+
 		players = append(players, domain.TopPlayer{
 			UserID:      userID,
 			Score:       int64(result.Score),
-			Rank:        int64(rank + 1), // Rank is 1-indexed
+			Rank:        rank,
 			GameID:      gameID,
 			LastUpdated: time.Now(),
 		})
@@ -61,11 +68,11 @@ func (r *RedisReportRepository) GetTopPlayers(ctx context.Context, gameID string
 
 // GetTopPlayersByDateRange retrieves top players (Redis doesn't support date ranges directly,
 // so we return current top players. For historical data, use PostgreSQL)
-func (r *RedisReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, _ /* startDate */, _ /* endDate */ time.Time, limit int64) ([]domain.TopPlayer, error) {
+func (r *RedisReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, _ /* startDate */, _ /* endDate */ time.Time, limit, offset int64) ([]domain.TopPlayer, error) {
 	// Redis sorted sets don't support date ranges directly
 	// For now, return current top players
 	// In a real implementation, you might query PostgreSQL for historical data
-	return r.GetTopPlayers(ctx, gameID, limit)
+	return r.GetTopPlayers(ctx, gameID, limit, offset)
 }
 
 // GetTotalPlayers retrieves the total number of players

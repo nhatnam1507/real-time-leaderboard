@@ -6,9 +6,11 @@ run:
   skip-dirs:
     - vendor
     - bin
+    - api
   skip-files:
     - ".*\\.pb\\.go$"
     - ".*\\.gen\\.go$"
+    - "api/docs\\.go"
 
 linters-settings:
   errcheck:
@@ -57,6 +59,10 @@ issues:
       linters:
         - errcheck
         - gosec
+    - path: api/docs\.go
+      text: "avoid meaningless package names"
+      linters:
+        - revive
   max-issues-per-linter: 0
   max-same-issues: 0
 

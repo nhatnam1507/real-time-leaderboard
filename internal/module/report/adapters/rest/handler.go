@@ -2,11 +2,11 @@
 package rest
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/module/report/application"
+	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
 )
 
@@ -24,19 +24,31 @@ func NewHandler(reportUseCase *application.ReportUseCase) *Handler {
 
 // GetTopPlayersReport handles getting top players report
 // @Summary Get top players report
-// @Description Get a report of top players, optionally filtered by game and date range
+// @Description Get a paginated report of top players, optionally filtered by game and date range. Uses Redis for current data or PostgreSQL for historical data when date range is provided.
 // @Tags reports
 // @Accept json
 // @Produce json
-// @Param game_id query string false "Game ID (empty for global)"
-// @Param start_date query string false "Start date (RFC3339 format)"
-// @Param end_date query string false "End date (RFC3339 format)"
-// @Param limit query int false "Number of top players" default(10)
-// @Success 200 {object} response.Response
+// @Param game_id query string false "Game ID (empty or 'global' for global leaderboard)" example(game1)
+// @Param start_date query string false "Start date in RFC3339 format" example(2024-01-01T00:00:00Z)
+// @Param end_date query string false "End date in RFC3339 format" example(2024-01-31T23:59:59Z)
+// @Param limit query int false "Number of top players" default(10) minimum(1) maximum(100) example(10)
+// @Param offset query int false "Number of results to skip" default(0) minimum(0) example(0)
+// @Success 200 {object} response.Response "Report generated successfully"
+// @Failure 500 {object} response.Response "Internal server error"
 // @Router /api/v1/reports/top-players [get]
 func (h *Handler) GetTopPlayersReport(c *gin.Context) {
+	var listReq request.ListRequest
+	if err := listReq.FromGinContext(c); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if err := listReq.Validate(); err != nil {
+		response.Error(c, err)
+		return
+	}
+
 	gameID := c.DefaultQuery("game_id", "global")
-	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "10"), 10, 64)
 
 	var startDate, endDate *time.Time
 
@@ -53,10 +65,10 @@ func (h *Handler) GetTopPlayersReport(c *gin.Context) {
 	}
 
 	req := application.GetTopPlayersReportRequest{
-		GameID:    gameID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Limit:     limit,
+		ListRequest: listReq,
+		GameID:      gameID,
+		StartDate:   startDate,
+		EndDate:     endDate,
 	}
 
 	report, err := h.reportUseCase.GetTopPlayersReport(c.Request.Context(), req)

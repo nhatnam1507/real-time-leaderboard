@@ -20,7 +20,7 @@ func NewPostgresReportRepository(pool *pgxpool.Pool) *PostgresReportRepository {
 }
 
 // GetTopPlayersByDateRange retrieves top players within a date range from PostgreSQL
-func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, startDate, endDate time.Time, limit int64) ([]domain.TopPlayer, error) {
+func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context, gameID string, startDate, endDate time.Time, limit, offset int64) ([]domain.TopPlayer, error) {
 	var query string
 	var args []interface{}
 
@@ -32,9 +32,9 @@ func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context,
 			WHERE submitted_at >= $1 AND submitted_at <= $2
 			GROUP BY user_id
 			ORDER BY total_score DESC
-			LIMIT $3
+			LIMIT $3 OFFSET $4
 		`
-		args = []interface{}{startDate, endDate, limit}
+		args = []interface{}{startDate, endDate, limit, offset}
 	} else {
 		// Game-specific leaderboard
 		query = `
@@ -43,9 +43,9 @@ func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context,
 			WHERE game_id = $1 AND submitted_at >= $2 AND submitted_at <= $3
 			GROUP BY user_id
 			ORDER BY max_score DESC
-			LIMIT $4
+			LIMIT $4 OFFSET $5
 		`
-		args = []interface{}{gameID, startDate, endDate, limit}
+		args = []interface{}{gameID, startDate, endDate, limit, offset}
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -55,7 +55,7 @@ func (r *PostgresReportRepository) GetTopPlayersByDateRange(ctx context.Context,
 	defer rows.Close()
 
 	var players []domain.TopPlayer
-	rank := int64(1)
+	rank := offset + 1 // Rank accounts for offset
 
 	for rows.Next() {
 		var player domain.TopPlayer

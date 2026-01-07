@@ -101,8 +101,8 @@ func (h *Hub) broadcastLeaderboard() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Get global leaderboard
-	leaderboard, err := h.leaderboardUseCase.GetGlobalLeaderboard(ctx, 10)
+	// Get top 10 from global leaderboard (no pagination for WebSocket)
+	leaderboard, err := h.leaderboardUseCase.GetGlobalLeaderboardTopN(ctx, 10)
 	if err != nil {
 		log.Printf("Error getting leaderboard: %v", err)
 		return
@@ -240,13 +240,13 @@ func HandleWebSocket(hub *Hub) gin.HandlerFunc {
 
 		client.hub.register <- client
 
-		// Send initial leaderboard
+		// Send initial leaderboard (top 10, no pagination for WebSocket)
 		var leaderboard *domain.Leaderboard
 		var err2 error
 		if gameID == "" || gameID == "global" {
-			leaderboard, err2 = client.leaderboardUseCase.GetGlobalLeaderboard(c.Request.Context(), 10)
+			leaderboard, err2 = client.leaderboardUseCase.GetGlobalLeaderboardTopN(c.Request.Context(), 10)
 		} else {
-			leaderboard, err2 = client.leaderboardUseCase.GetGameLeaderboard(c.Request.Context(), gameID, 10)
+			leaderboard, err2 = client.leaderboardUseCase.GetGameLeaderboardTopN(c.Request.Context(), gameID, 10)
 		}
 
 		if err2 == nil && leaderboard != nil {

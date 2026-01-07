@@ -4,11 +4,12 @@ Each module is designed to be self-contained and can be easily extracted into a 
 
 ## Migration Steps
 
-1. **Copy module directory** to new service repository
-2. **Update dependencies**: Replace shared infrastructure with service-specific connections
-3. **Add inter-service communication**: Implement gRPC or REST clients for cross-service calls
-4. **Update shared components**: Either copy shared components or use a shared library
-5. **No refactoring needed**: Module structure remains the same
+1. **Copy module content** (all clean architecture layers: domain, application, adapters, infrastructure) to new service repository
+2. **Remove module wrapper**: Place layers directly under `internal/` (no `module/` directory in microservices)
+3. **Remove shared infrastructure**: Each microservice manages its own infrastructure connections (no `shared/` directory)
+4. **Update dependencies**: Replace shared infrastructure with service-specific connections
+5. **Add inter-service communication**: Implement gRPC or REST clients for cross-service calls
+6. **No refactoring needed**: Clean architecture layer structure remains the same
 
 ## Example: Extracting Leaderboard Module
 
@@ -19,10 +20,10 @@ leaderboard-service/
 │       └── main.go
 ├── internal/
 │   ├── config/
-│   ├── shared/          # Copy or use shared library
-│   │   └── redis/       # Redis connection (shared infrastructure)
-│   └── module/
-│       └── leaderboard/ # Copy entire module - no changes needed
+│   ├── domain/          # Domain entities and repository interfaces
+│   ├── application/     # Use cases and business logic
+│   ├── adapters/        # HTTP/WebSocket handlers
+│   └── infrastructure/  # Repository implementations (includes Redis, DB connections)
 ```
 
 ## Benefits

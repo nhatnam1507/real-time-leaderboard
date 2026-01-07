@@ -23,14 +23,14 @@ func NewHandler(authUseCase *application.AuthUseCase) *Handler {
 
 // Register handles user registration
 // @Summary Register a new user
-// @Description Register a new user with username, email, and password
+// @Description Register a new user with username, email, and password. Returns user information and JWT tokens.
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body application.RegisterRequest true "Registration request"
-// @Success 201 {object} response.Response
-// @Failure 400 {object} response.Response
-// @Failure 409 {object} response.Response
+// @Param request body application.RegisterRequest true "Registration request" example({"username":"john_doe","email":"john@example.com","password":"password123"})
+// @Success 201 {object} response.Response "User registered successfully"
+// @Failure 400 {object} response.Response "Invalid request"
+// @Failure 409 {object} response.Response "User already exists"
 // @Router /api/v1/auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
 	var req application.RegisterRequest
@@ -58,13 +58,13 @@ func (h *Handler) Register(c *gin.Context) {
 
 // Login handles user login
 // @Summary Login user
-// @Description Authenticate user and return access token
+// @Description Authenticate user with username and password, returns JWT access and refresh tokens
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body application.LoginRequest true "Login request"
-// @Success 200 {object} response.Response
-// @Failure 401 {object} response.Response
+// @Param request body application.LoginRequest true "Login request" example({"username":"john_doe","password":"password123"})
+// @Success 200 {object} response.Response "Login successful"
+// @Failure 401 {object} response.Response "Invalid credentials"
 // @Router /api/v1/auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
 	var req application.LoginRequest
@@ -92,13 +92,13 @@ func (h *Handler) Login(c *gin.Context) {
 
 // RefreshToken handles token refresh
 // @Summary Refresh access token
-// @Description Refresh access token using refresh token
+// @Description Refresh access token using a valid refresh token. Returns new access and refresh tokens.
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param refresh_token body object{refresh_token=string} true "Refresh token"
-// @Success 200 {object} response.Response
-// @Failure 401 {object} response.Response
+// @Param request body object{refresh_token=string} true "Refresh token request" example({"refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."})
+// @Success 200 {object} response.Response "Token refreshed successfully"
+// @Failure 401 {object} response.Response "Invalid or expired refresh token"
 // @Router /api/v1/auth/refresh [post]
 func (h *Handler) RefreshToken(c *gin.Context) {
 	var req struct {

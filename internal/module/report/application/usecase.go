@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"real-time-leaderboard/internal/module/report/domain"
+	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/logger"
 )
@@ -26,31 +27,27 @@ func NewReportUseCase(reportRepo domain.ReportRepository, l *logger.Logger) *Rep
 
 // GetTopPlayersReportRequest represents a request for top players report
 type GetTopPlayersReportRequest struct {
+	request.ListRequest
 	GameID    string
 	StartDate *time.Time
 	EndDate   *time.Time
-	Limit     int64
 }
 
 // GetTopPlayersReport generates a top players report
 func (uc *ReportUseCase) GetTopPlayersReport(ctx context.Context, req GetTopPlayersReportRequest) (*domain.TopPlayersReport, error) {
-
-	if req.Limit <= 0 {
-		req.Limit = 10
-	}
-	if req.Limit > 100 {
-		req.Limit = 100
-	}
+	// Extract pagination values from embedded ListRequest
+	limit := int64(req.GetLimit())
+	offset := int64(req.GetOffset())
 
 	var players []domain.TopPlayer
 	var err error
 
 	// If date range is provided, use PostgreSQL for historical data
 	if req.StartDate != nil && req.EndDate != nil {
-		players, err = uc.reportRepo.GetTopPlayersByDateRange(ctx, req.GameID, *req.StartDate, *req.EndDate, req.Limit)
+		players, err = uc.reportRepo.GetTopPlayersByDateRange(ctx, req.GameID, *req.StartDate, *req.EndDate, limit, offset)
 	} else {
 		// Otherwise, use Redis for current leaderboard
-		players, err = uc.reportRepo.GetTopPlayers(ctx, req.GameID, req.Limit)
+		players, err = uc.reportRepo.GetTopPlayers(ctx, req.GameID, limit, offset)
 	}
 
 	if err != nil {

@@ -1,4 +1,25 @@
 // Package main provides the entry point for the real-time leaderboard server.
+//
+//	@title			Real-Time Leaderboard API
+//	@version		1.0
+//	@description	Real-time leaderboard system with WebSocket support for live updates
+//	@termsOfService	http://swagger.io/terms/
+//
+//	@contact.name	API Support
+//	@contact.url	http://www.example.com/support
+//	@contact.email	support@example.com
+//
+//	@license.name	Apache 2.0
+//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+//
+//	@host		localhost:8080
+//	@BasePath	/api/v1
+//
+//	@securityDefinitions.bearer	Bearer
+//	@securityDefinitions.bearer	type	apiKey
+//	@securityDefinitions.bearer	in	header
+//	@securityDefinitions.bearer	name	Authorization
+//	@securityDefinitions.bearer	bearerFormat	JWT
 package main
 
 import (
@@ -32,6 +53,10 @@ import (
 	"real-time-leaderboard/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "real-time-leaderboard/docs" // Swagger docs
 )
 
 func main() {
@@ -169,6 +194,9 @@ func setupRouter(
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Swagger UI
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// API routes
 	api := router.Group("/api/v1")

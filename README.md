@@ -128,6 +128,10 @@ real-time-leaderboard/
 │   ├── Dockerfile                 # Production Docker image
 │   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
 │   └── docker-compose.yml         # Full compose file (includes deps + app)
+├── api/                           # Generated Swagger documentation
+│   ├── docs.go                    # Go package with embedded Swagger docs
+│   ├── swagger.json               # OpenAPI 2.0 JSON specification
+│   └── swagger.yaml               # OpenAPI 2.0 YAML specification
 ├── .air.toml                      # Air configuration for hot reload
 ├── .golangci.yml                  # golangci-lint configuration
 ├── go.mod
@@ -176,6 +180,9 @@ make ut
 
 # Run all checks (lint + unit tests + workflow validation)
 make check
+
+# Generate Swagger documentation
+make swagger
 ```
 
 See [Development Guide](./docs/development.md) for complete list of commands.

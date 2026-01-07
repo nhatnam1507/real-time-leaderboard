@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 
 	"real-time-leaderboard/internal/module/score/domain"
-	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/logger"
+	"real-time-leaderboard/internal/shared/request"
+	"real-time-leaderboard/internal/shared/response"
 )
 
 // ScoreUseCase handles score use cases
@@ -31,10 +32,11 @@ func NewScoreUseCase(
 }
 
 // SubmitScoreRequest represents a score submission request
+// @Description Score submission request with game ID, score value, and optional metadata
 type SubmitScoreRequest struct {
-	GameID   string          `json:"game_id" validate:"required"`
-	Score    int64           `json:"score" validate:"required,gte=0"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
+	GameID   string          `json:"game_id" validate:"required" example:"game1"`
+	Score    int64           `json:"score" validate:"required,gte=0" example:"1000"`
+	Metadata json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // SubmitScore submits a new score
@@ -87,17 +89,10 @@ func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req Subm
 }
 
 // GetUserScores retrieves scores for a user
-func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID string, limit, offset int) ([]*domain.Score, error) {
-
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
+func (uc *ScoreUseCase) GetUserScores(ctx context.Context, userID string, gameID string, listReq *request.ListRequest) ([]*domain.Score, error) {
+	// Extract pagination values from ListRequest
+	limit := listReq.GetLimit()
+	offset := listReq.GetOffset()
 
 	var scores []*domain.Score
 	var err error
