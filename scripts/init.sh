@@ -44,87 +44,98 @@ check_go() {
     echo "✓ Go is installed"
 }
 
-# Function to install and check golangci-lint
-install_golangci_lint() {
-    if ! command_exists golangci-lint; then
-        echo "Installing golangci-lint..."
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest > /dev/null 2>&1
-        echo "✓ golangci-lint installed"
-        return 0
-    else
-        echo "✓ golangci-lint already installed"
-        return 1
-    fi
-}
-
-# Function to check golangci-lint (for CI)
+# Function to check golangci-lint
 check_golangci_lint() {
     if ! command_exists golangci-lint; then
-        echo "Error: golangci-lint is not installed. Please install it first."
-        exit 1
+        echo "Error: golangci-lint is not installed."
+        return 1
     fi
     echo "✓ golangci-lint is installed"
+    return 0
+}
+
+# Function to install golangci-lint
+install_golangci_lint() {
+    echo "Installing golangci-lint..."
+    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest > /dev/null 2>&1
+    echo "✓ golangci-lint installed"
+}
+
+# Function to check migrate tool
+check_migrate() {
+    if ! command_exists migrate; then
+        echo "Error: migrate tool is not installed."
+        return 1
+    fi
+    echo "✓ migrate tool is installed"
+    return 0
 }
 
 # Function to install migrate tool
 install_migrate() {
-    if ! command_exists migrate; then
-        echo "Installing migrate tool..."
-        go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest > /dev/null 2>&1
-        echo "✓ migrate tool installed"
-        return 0
-    else
-        echo "✓ migrate tool already installed"
+    echo "Installing migrate tool..."
+    go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest > /dev/null 2>&1
+    echo "✓ migrate tool installed"
+}
+
+# Function to check air
+check_air() {
+    if ! command_exists air; then
+        echo "Error: air is not installed."
         return 1
     fi
+    echo "✓ air is installed"
+    return 0
 }
 
 # Function to install air for hot reload
 install_air() {
-    if ! command_exists air; then
-        echo "Installing air..."
-        go install github.com/air-verse/air@latest > /dev/null 2>&1
-        echo "✓ air installed"
-        return 0
-    else
-        echo "✓ air already installed"
+    echo "Installing air..."
+    go install github.com/air-verse/air@latest > /dev/null 2>&1
+    echo "✓ air installed"
+}
+
+# Function to check wait4x
+check_wait4x() {
+    if ! command_exists wait4x; then
+        echo "Error: wait4x is not installed."
         return 1
     fi
+    echo "✓ wait4x is installed"
+    return 0
 }
 
 # Function to install wait4x for service health checking
 install_wait4x() {
-    if ! command_exists wait4x; then
-        echo "Installing wait4x..."
-        go install wait4x.dev/v3/cmd/wait4x@latest > /dev/null 2>&1
-        echo "✓ wait4x installed"
-        return 0
-    else
-        echo "✓ wait4x already installed"
+    echo "Installing wait4x..."
+    go install wait4x.dev/v3/cmd/wait4x@latest > /dev/null 2>&1
+    echo "✓ wait4x installed"
+}
+
+# Function to check act
+check_act() {
+    if ! command_exists act; then
+        echo "Error: act is not installed."
         return 1
     fi
+    echo "✓ act is installed"
+    return 0
 }
 
 # Function to install act for local GitHub Actions testing
 install_act() {
-    if ! command_exists act; then
-        echo "Installing act..."
-        # Install act to Go bin directory (user-accessible, no sudo needed)
-        # Download latest release binary for Linux
-        ACT_VERSION=$(curl -s https://api.github.com/repos/nektos/act/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [ -z "$ACT_VERSION" ]; then
-            ACT_VERSION="v0.2.60"  # Fallback version
-        fi
-        curl -sL "https://github.com/nektos/act/releases/download/${ACT_VERSION}/act_Linux_x86_64.tar.gz" | \
-            tar -xz -C /tmp && \
-            mv /tmp/act $(go env GOPATH)/bin/act && \
-            chmod +x $(go env GOPATH)/bin/act
-        echo "✓ act installed"
-        return 0
-    else
-        echo "✓ act already installed"
-        return 1
+    echo "Installing act..."
+    # Install act to Go bin directory (user-accessible, no sudo needed)
+    # Download latest release binary for Linux
+    ACT_VERSION=$(curl -s https://api.github.com/repos/nektos/act/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    if [ -z "$ACT_VERSION" ]; then
+        ACT_VERSION="v0.2.60"  # Fallback version
     fi
+    curl -sL "https://github.com/nektos/act/releases/download/${ACT_VERSION}/act_Linux_x86_64.tar.gz" | \
+        tar -xz -C /tmp && \
+        mv /tmp/act $(go env GOPATH)/bin/act && \
+        chmod +x $(go env GOPATH)/bin/act
+    echo "✓ act installed"
 }
 
 # Function to check docker
@@ -183,12 +194,31 @@ init_dev() {
     check_go
     echo ""
     
-    # Install all tools
-    if install_golangci_lint; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
-    if install_migrate; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
-    if install_air; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
-    if install_wait4x; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
-    if install_act; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    # Install all tools (check first, install if missing)
+    if ! check_golangci_lint; then
+        install_golangci_lint
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+    
+    if ! check_migrate; then
+        install_migrate
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+    
+    if ! check_air; then
+        install_air
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+    
+    if ! check_wait4x; then
+        install_wait4x
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+    
+    if ! check_act; then
+        install_act
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
     echo ""
     
     # Check Docker
@@ -225,12 +255,10 @@ init_ci() {
     check_go
     echo ""
     
-    # Check golangci-lint
-    check_golangci_lint
-    echo ""
-    
-    # Download Go dependencies
-    download_go_dependencies
+    # Check and install golangci-lint if needed
+    if ! check_golangci_lint; then
+        install_golangci_lint
+    fi
     echo ""
     
     echo "CI environment is ready!"
