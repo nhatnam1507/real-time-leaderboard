@@ -128,10 +128,10 @@ real-time-leaderboard/
 │   ├── Dockerfile                 # Production Docker image
 │   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
 │   └── docker-compose.yml         # Full compose file (includes deps + app)
-├── api/                           # Generated Swagger documentation
-│   ├── docs.go                    # Go package with embedded Swagger docs
-│   ├── swagger.json               # OpenAPI 2.0 JSON specification
-│   └── swagger.yaml               # OpenAPI 2.0 YAML specification
+├── api/                           # OpenAPI 3.0 specifications
+│   ├── v1/                        # API v1 specification
+│   │   └── openapi.yaml           # OpenAPI 3.0 YAML specification
+│   └── swagger-ui.html            # Swagger UI for viewing OpenAPI docs
 ├── .air.toml                      # Air configuration for hot reload
 ├── .golangci.yml                  # golangci-lint configuration
 ├── go.mod
@@ -145,10 +145,23 @@ For detailed documentation, see the [docs](./docs/) folder:
 
 - **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and architectural principles
 - **[Modules](./docs/modules.md)** - Detailed module documentation
-- **[API Documentation](./docs/api.md)** - Complete API reference
 - **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
 - **[Microservice Migration](./docs/microservice-migration.md)** - Guide for extracting modules to microservices
 - **[Redis Strategy](./docs/redis-strategy.md)** - Redis sorted sets implementation details
+
+### API Documentation
+
+The API is documented using OpenAPI 3.0 specification (spec-first approach):
+
+- **OpenAPI Spec**: `api/v1/openapi.yaml` - The source of truth for API documentation
+- **Swagger UI**: http://localhost:8080/swagger/index.html - Interactive API documentation
+- **OpenAPI YAML**: http://localhost:8080/api/v1/openapi.yaml
+- **OpenAPI JSON**: http://localhost:8080/api/v1/openapi.json
+
+To validate the OpenAPI specification:
+```bash
+make openapi
+```
 
 ## Common Commands
 
@@ -181,8 +194,8 @@ make ut
 # Run all checks (lint + unit tests + workflow validation)
 make check
 
-# Generate Swagger documentation
-make swagger
+# Validate OpenAPI specification
+make openapi
 ```
 
 See [Development Guide](./docs/development.md) for complete list of commands.

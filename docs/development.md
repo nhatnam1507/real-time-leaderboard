@@ -244,6 +244,22 @@ The project uses [Air](https://github.com/air-verse/air) for hot reload during d
 
 The Air configuration is automatically used when running `make start-dev` or `./scripts/run.sh dev`.
 
+## API Documentation
+
+The API is documented using OpenAPI 3.0 specification following a spec-first approach:
+
+- **OpenAPI Spec**: `api/v1/openapi.yaml` - The source of truth for API documentation
+- **Swagger UI**: http://localhost:8080/swagger/index.html - Interactive API documentation
+- **OpenAPI YAML**: http://localhost:8080/api/v1/openapi.yaml
+- **OpenAPI JSON**: http://localhost:8080/api/v1/openapi.json
+
+To validate the OpenAPI specification:
+```bash
+make openapi
+```
+
+**Note**: The OpenAPI spec is the single source of truth. All API documentation is maintained in the spec file, not in code annotations.
+
 ## Technology Stack
 
 - **Language**: Go 1.25.5
@@ -256,4 +272,5 @@ The Air configuration is automatically used when running `make start-dev` or `./
 - **WebSocket**: Gorilla WebSocket
 - **Validation**: go-playground/validator/v10
 - **Logging**: zerolog
+- **API Documentation**: OpenAPI 3.0 (spec-first approach)
 

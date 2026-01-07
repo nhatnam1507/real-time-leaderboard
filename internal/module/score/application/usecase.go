@@ -32,11 +32,10 @@ func NewScoreUseCase(
 }
 
 // SubmitScoreRequest represents a score submission request
-// @Description Score submission request with game ID, score value, and optional metadata
 type SubmitScoreRequest struct {
 	GameID   string          `json:"game_id" validate:"required" example:"game1"`
 	Score    int64           `json:"score" validate:"required,gte=0" example:"1000"`
-	Metadata json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
+	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // SubmitScore submits a new score

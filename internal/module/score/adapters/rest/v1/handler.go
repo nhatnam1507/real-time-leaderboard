@@ -1,5 +1,5 @@
-// Package rest provides REST API handlers for the score module.
-package rest
+// Package v1 provides REST API v1 handlers for the score module.
+package v1
 
 import (
 	"real-time-leaderboard/internal/module/score/application"
@@ -24,17 +24,6 @@ func NewHandler(scoreUseCase *application.ScoreUseCase) *Handler {
 }
 
 // SubmitScore handles score submission
-// @Summary Submit a score
-// @Description Submit a score for a game. Requires authentication. The score will be saved and the leaderboard will be updated.
-// @Tags scores
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param request body application.SubmitScoreRequest true "Score submission request" example({"game_id":"game1","score":1000,"metadata":{"level":5,"time":120}})
-// @Success 201 {object} response.Response "Score submitted successfully"
-// @Failure 400 {object} response.Response "Invalid request"
-// @Failure 401 {object} response.Response "Unauthorized"
-// @Router /api/v1/scores [post]
 func (h *Handler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
@@ -63,18 +52,6 @@ func (h *Handler) SubmitScore(c *gin.Context) {
 }
 
 // GetUserScores handles retrieving user scores
-// @Summary Get user scores
-// @Description Get paginated scores for the authenticated user. Optionally filter by game ID.
-// @Tags scores
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param game_id query string false "Filter by game ID" example(game1)
-// @Param limit query int false "Number of results per page" default(10) minimum(1) maximum(100) example(10)
-// @Param offset query int false "Number of results to skip" default(0) minimum(0) example(0)
-// @Success 200 {object} response.Response "Scores retrieved successfully"
-// @Failure 401 {object} response.Response "Unauthorized"
-// @Router /api/v1/scores/me [get]
 func (h *Handler) GetUserScores(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {

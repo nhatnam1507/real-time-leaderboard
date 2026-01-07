@@ -1,25 +1,4 @@
 // Package main provides the entry point for the real-time leaderboard server.
-//
-//	@title			Real-Time Leaderboard API
-//	@version		1.0
-//	@description	Real-time leaderboard system with WebSocket support for live updates
-//	@termsOfService	http://swagger.io/terms/
-//
-//	@contact.name	API Support
-//	@contact.url	http://www.example.com/support
-//	@contact.email	support@example.com
-//
-//	@license.name	Apache 2.0
-//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
-//
-//	@host		localhost:8080
-//	@BasePath	/api/v1
-//
-//	@securityDefinitions.bearer	Bearer
-//	@securityDefinitions.bearer	type	apiKey
-//	@securityDefinitions.bearer	in	header
-//	@securityDefinitions.bearer	name	Authorization
-//	@securityDefinitions.bearer	bearerFormat	JWT
 package main
 
 import (
@@ -32,18 +11,18 @@ import (
 	"time"
 
 	"real-time-leaderboard/internal/config"
-	authREST "real-time-leaderboard/internal/module/auth/adapters/rest"
+	v1Auth "real-time-leaderboard/internal/module/auth/adapters/rest/v1"
 	authApp "real-time-leaderboard/internal/module/auth/application"
 	authJWT "real-time-leaderboard/internal/module/auth/infrastructure/jwt"
 	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
-	leaderboardREST "real-time-leaderboard/internal/module/leaderboard/adapters/rest"
+	v1Leaderboard "real-time-leaderboard/internal/module/leaderboard/adapters/rest/v1"
 	"real-time-leaderboard/internal/module/leaderboard/adapters/websocket"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
 	leaderboardInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/repository"
-	reportREST "real-time-leaderboard/internal/module/report/adapters/rest"
+	v1Report "real-time-leaderboard/internal/module/report/adapters/rest/v1"
 	reportApp "real-time-leaderboard/internal/module/report/application"
 	reportInfra "real-time-leaderboard/internal/module/report/infrastructure/repository"
-	scoreREST "real-time-leaderboard/internal/module/score/adapters/rest"
+	v1Score "real-time-leaderboard/internal/module/score/adapters/rest/v1"
 	scoreApp "real-time-leaderboard/internal/module/score/application"
 	scoreInfra "real-time-leaderboard/internal/module/score/infrastructure/repository"
 	"real-time-leaderboard/internal/shared/database"
@@ -52,11 +31,11 @@ import (
 	redisInfra "real-time-leaderboard/internal/shared/redis"
 	"real-time-leaderboard/internal/shared/response"
 
-	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
+	"path/filepath"
+	"strings"
 
-	_ "real-time-leaderboard/docs" // Swagger docs
+	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -109,10 +88,10 @@ func main() {
 	reportUseCase := reportApp.NewReportUseCase(reportRepo, l)
 
 	// Initialize handlers
-	authHandler := authREST.NewHandler(authUseCase)
-	scoreHandler := scoreREST.NewHandler(scoreUseCase)
-	leaderboardHandler := leaderboardREST.NewHandler(leaderboardUseCase)
-	reportHandler := reportREST.NewHandler(reportUseCase)
+	authHandler := v1Auth.NewHandler(authUseCase)
+	scoreHandler := v1Score.NewHandler(scoreUseCase)
+	leaderboardHandler := v1Leaderboard.NewHandler(leaderboardUseCase)
+	reportHandler := v1Report.NewHandler(reportUseCase)
 
 	// Initialize WebSocket hub
 	leaderboardHub := websocket.NewHub(leaderboardUseCase)
@@ -161,10 +140,10 @@ func setupRouter(
 	cfg *config.Config,
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
-	authHandler *authREST.Handler,
-	scoreHandler *scoreREST.Handler,
-	leaderboardHandler *leaderboardREST.Handler,
-	reportHandler *reportREST.Handler,
+	authHandler *v1Auth.Handler,
+	scoreHandler *v1Score.Handler,
+	leaderboardHandler *v1Leaderboard.Handler,
+	reportHandler *v1Report.Handler,
 	leaderboardHub *websocket.Hub,
 ) *gin.Engine {
 	if cfg.Logger.Level == "debug" {
@@ -195,10 +174,49 @@ func setupRouter(
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Swagger UI
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// OpenAPI 3.0 spec endpoints (versioned)
+	router.GET("/api/v1/openapi.yaml", func(c *gin.Context) {
+		openAPIPath := getOpenAPISpecPath()
+		if openAPIPath == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid OpenAPI spec path"})
+			return
+		}
+		// #nosec G304 -- Path is validated and restricted to api/v1 directory
+		data, err := os.ReadFile(openAPIPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read OpenAPI spec"})
+			return
+		}
+		c.Data(http.StatusOK, "application/x-yaml", data)
+	})
 
-	// API routes
+	router.GET("/api/v1/openapi.json", func(c *gin.Context) {
+		openAPIPath := getOpenAPISpecPath()
+		if openAPIPath == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid OpenAPI spec path"})
+			return
+		}
+		// #nosec G304 -- Path is validated and restricted to api/v1 directory
+		data, err := os.ReadFile(openAPIPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read OpenAPI spec"})
+			return
+		}
+
+		var yamlData interface{}
+		if err := yaml.Unmarshal(data, &yamlData); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse OpenAPI spec"})
+			return
+		}
+
+		c.JSON(http.StatusOK, yamlData)
+	})
+
+	// Swagger UI for OpenAPI 3.0 (with version selection)
+	router.StaticFile("/swagger", "./api/swagger-ui.html")
+	router.StaticFile("/swagger/index.html", "./api/swagger-ui.html")
+
+	// API v1 routes
 	api := router.Group("/api/v1")
 	{
 		// Auth routes (no auth required)
@@ -221,4 +239,32 @@ func setupRouter(
 	router.GET("/ws/leaderboard", websocket.HandleWebSocket(leaderboardHub))
 
 	return router
+}
+
+// getOpenAPISpecPath returns the validated path to the OpenAPI v1 spec file.
+// It ensures the path is within the api/v1 directory to prevent path traversal attacks.
+func getOpenAPISpecPath() string {
+	basePath := filepath.Join(".", "api", "v1")
+	specPath := filepath.Join(basePath, "openapi.yaml")
+
+	// Clean the path to remove any .. or . components
+	cleanedPath := filepath.Clean(specPath)
+
+	// Get absolute paths for comparison
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return ""
+	}
+	absSpec, err := filepath.Abs(cleanedPath)
+	if err != nil {
+		return ""
+	}
+
+	// Ensure the spec path is within the base directory
+	// This prevents path traversal attacks
+	if !strings.HasPrefix(absSpec, absBase) {
+		return ""
+	}
+
+	return cleanedPath
 }

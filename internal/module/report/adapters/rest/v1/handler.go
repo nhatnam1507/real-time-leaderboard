@@ -1,13 +1,14 @@
-// Package rest provides REST API handlers for the report module.
-package rest
+// Package v1 provides REST API v1 handlers for the report module.
+package v1
 
 import (
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"real-time-leaderboard/internal/module/report/application"
 	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Handler handles HTTP requests for reports
@@ -23,19 +24,6 @@ func NewHandler(reportUseCase *application.ReportUseCase) *Handler {
 }
 
 // GetTopPlayersReport handles getting top players report
-// @Summary Get top players report
-// @Description Get a paginated report of top players, optionally filtered by game and date range. Uses Redis for current data or PostgreSQL for historical data when date range is provided.
-// @Tags reports
-// @Accept json
-// @Produce json
-// @Param game_id query string false "Game ID (empty or 'global' for global leaderboard)" example(game1)
-// @Param start_date query string false "Start date in RFC3339 format" example(2024-01-01T00:00:00Z)
-// @Param end_date query string false "End date in RFC3339 format" example(2024-01-31T23:59:59Z)
-// @Param limit query int false "Number of top players" default(10) minimum(1) maximum(100) example(10)
-// @Param offset query int false "Number of results to skip" default(0) minimum(0) example(0)
-// @Success 200 {object} response.Response "Report generated successfully"
-// @Failure 500 {object} response.Response "Internal server error"
-// @Router /api/v1/reports/top-players [get]
 func (h *Handler) GetTopPlayersReport(c *gin.Context) {
 	var listReq request.ListRequest
 	if err := listReq.FromGinContext(c); err != nil {
