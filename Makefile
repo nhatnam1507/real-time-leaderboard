@@ -1,4 +1,4 @@
-.PHONY: help init start-dev run check lint ut stop clean
+.PHONY: help init-dev init-ci start-dev run check lint ut stop clean
 
 # Variables
 COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
@@ -17,30 +17,30 @@ help:
 	@echo 'Available targets:'
 	@sed -n 's/^##//p' $(MAKEFILE_LIST) | awk -F: '{printf "  %-20s %s\n", $$1, $$2}'
 
-## init: Install all required tools and libs for lint, test, build, local full run with docker compose
-init:
-	@./scripts/init.sh
+## init-dev: Install all required tools and libs for lint, test, build, local full run with docker compose
+init-dev:
+	@./scripts/init.sh dev
+
+## init-ci: Initialize CI environment (check lint and go installation only)
+init-ci:
+	@./scripts/init.sh ci
 
 ## start-dev: Start compose deps file and start the application with air in local VM. Uses migrate script with db url pointing to localhost
-start-dev:
-	@SILENT=1 ./scripts/init.sh
+start-dev: init-dev
 	@./scripts/run.sh dev
 
 ## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to localhost
-run:
-	@SILENT=1 ./scripts/init.sh
+run: init-dev
 	@./scripts/run.sh all
 
 ## lint: Run linter (golangci-lint)
 lint:
-	@SILENT=1 ./scripts/init.sh
 	@echo "Running linter..."
 	@golangci-lint run ./cmd/... ./internal/...
 	@echo "Linter completed successfully"
 
 ## ut: Run unit tests
 ut:
-	@SILENT=1 ./scripts/init.sh
 	@echo "Running unit tests..."
 	@go test ./...
 	@echo "Unit tests completed successfully"

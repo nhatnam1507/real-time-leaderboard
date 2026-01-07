@@ -26,12 +26,17 @@ The project includes a simplified Makefile with essential commands for developme
 make help
 
 # Initialize development environment
-# - Installs golangci-lint, migrate tool, air, and act (if missing)
+# - Installs golangci-lint, migrate tool, air, wait4x, and act (if missing)
 # - Configures git hooks automatically (uses .githooks directory)
 # - Verifies Docker and Docker Compose are available
 # - Downloads Go dependencies
-# This is automatically run before other targets
-make init
+# This is automatically run before check, start-dev, and run targets
+make init-dev
+
+# Initialize CI environment (for CI/CD pipelines)
+# - Checks Go and golangci-lint installation
+# - Downloads Go dependencies
+make init-ci
 
 # Start development environment
 # - Starts dependency services (PostgreSQL, Redis) via Docker Compose (if not already running)
@@ -113,10 +118,10 @@ The project includes utility scripts in the `scripts/` directory:
   - **Can be run from any directory** - paths are resolved relative to script location
 
 - **`init.sh`**: Development environment initialization
-  - Installs required tools (golangci-lint, migrate, air, wait4x, act)
-  - Configures git hooks automatically (uses .githooks directory)
-  - Verifies Docker/Docker Compose availability
-  - Downloads Go dependencies
+  - Tool-style script with two modes: `dev` and `ci`
+  - `dev` mode: Installs required tools (golangci-lint, migrate, air, wait4x, act), configures git hooks, verifies Docker/Docker Compose, downloads Go dependencies
+  - `ci` mode: Only checks Go and golangci-lint installation, downloads Go dependencies
+  - Usage: `./scripts/init.sh [dev|ci]`
 
 - **`validate-workflows.sh`**: GitHub Actions workflow validation
   - Validates workflow YAML syntax using act
@@ -126,7 +131,7 @@ The project includes utility scripts in the `scripts/` directory:
 
 1. **First time setup**:
    ```bash
-   make init
+   make init-dev
    ```
 
 2. **Daily development**:
@@ -226,7 +231,7 @@ DB_URL=postgres://user:pass@host:5432/dbname?sslmode=disable ./scripts/migrate.s
 migrate create -ext sql -dir internal/shared/database/migrations -seq migration_name
 ```
 
-The `migrate` and `wait4x` tools are automatically installed by `make init` if not already present.
+The `migrate` and `wait4x` tools are automatically installed by `make init-dev` if not already present.
 
 ## Hot Reload Configuration
 

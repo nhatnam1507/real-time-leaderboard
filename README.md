@@ -30,11 +30,11 @@ cd real-time-leaderboard
 
 2. **Initialize development environment**:
 ```bash
-make init
+make init-dev
 ```
 
 This will:
-- Install all required tools (golangci-lint, migrate, air, act)
+- Install all required tools (golangci-lint, migrate, air, wait4x, act)
 - Configure git hooks automatically
 - Verify Docker/Docker Compose are available
 
@@ -112,7 +112,7 @@ real-time-leaderboard/
 │       └── report/                 # Report Module
 ├── docs/                           # Documentation
 ├── scripts/                        # Utility scripts
-│   ├── init.sh                    # Initialize development environment
+│   ├── init.sh                    # Initialize development environment (dev/ci modes)
 │   ├── run.sh                     # Application startup script (dev/all modes)
 │   ├── migrate.sh                 # Database migration tool
 │   └── validate-workflows.sh      # GitHub Actions workflow validation
@@ -123,7 +123,7 @@ real-time-leaderboard/
 │   │   ├── pr.yml                 # PR workflow (lint + unit tests)
 │   │   └── ci.yml                 # CI workflow (lint + unit tests + dockerize)
 │   └── actions/                   # Reusable GitHub Actions
-│       └── init/                  # Init action (Go setup + make init)
+│       └── init/                  # Init action (Go setup + make init-ci)
 ├── docker/
 │   ├── Dockerfile                 # Production Docker image
 │   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
@@ -157,7 +157,7 @@ For detailed documentation, see the [docs](./docs/) folder:
 make help
 
 # Initialize development environment (install tools)
-make init
+make init-dev
 
 # Start development environment (deps + app with hot reload)
 make start-dev

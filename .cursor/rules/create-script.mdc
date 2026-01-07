@@ -1,0 +1,109 @@
+---
+globs: scripts/*.sh
+alwaysApply: false
+---
+# Script Style Guide for scripts/ directory
+
+When creating new bash scripts in the `scripts/` folder, follow this structure:
+
+## Required Structure
+
+1. **Header** (lines 1-7):
+   ```bash
+   #!/bin/bash
+   
+   # [Brief description]
+   # Usage: ./scripts/[script].sh [args]
+   #   [arg1]:  [description]
+   #   [arg2]:  [description]
+   
+   set -e
+   ```
+
+2. **Script Setup** (lines 8-18):
+   ```bash
+   # Get script directory and project root
+   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+   PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+   
+   # Change to project root directory
+   cd "$PROJECT_ROOT"
+   
+   # Add Go bin directory to PATH
+   export PATH="$(go env GOPATH)/bin:${PATH}"
+   ```
+
+3. **Configuration Section** (after PATH):
+   ```bash
+   # Configuration (paths relative to project root)
+   [VARIABLE_NAME]="$PROJECT_ROOT/[path]"
+   ```
+
+4. **show_usage() Function**:
+   ```bash
+   # Function to show usage
+   show_usage() {
+       echo "Usage: $0 [args]"
+       echo ""
+       echo "[Section]:"
+       echo "  [option]  [description]"
+       exit 1
+   }
+   ```
+
+5. **Helper Functions**: Use descriptive names, document with `# Function to [purpose]`
+
+6. **Main Mode/Command Functions**: One function per mode/command (e.g., `init_dev()`, `migrate_up()`)
+
+7. **main() Function**:
+   ```bash
+   # Main function - handles CLI input and execution
+   main() {
+       # Validate parameter count
+       if [ $# -eq 0 ]; then
+           echo "Error: Missing [required]"
+           show_usage
+       elif [ $# -gt [max] ]; then
+           echo "Error: Too many parameters. Expected [range], got $#"
+           show_usage
+       fi
+       
+       # Parse arguments
+       local [var]=$1
+       
+       # Execute based on mode/command
+       case "$[var]" in
+           [option1])
+               [function1]
+               ;;
+           [option2])
+               [function2]
+               ;;
+           *)
+               echo "Error: Invalid [type] '$[var]'"
+               show_usage
+               ;;
+       esac
+   }
+   ```
+
+8. **Execution** (last line):
+   ```bash
+   # Execute main function with all arguments
+   main "$@"
+   ```
+
+## Best Practices
+
+- Use `set -e` for error handling
+- Always change to project root: `cd "$PROJECT_ROOT"`
+- Use `$0` (not `${BASH_SOURCE[0]}`) for script path
+- Use `local` for function variables
+- Use `command -v` or `command_exists()` helper for command checks
+- Use `$PROJECT_ROOT` for absolute paths, relative paths for project-relative
+- Return codes: `0` = success, `1` = failure (for checks)
+- Use `✓` for success messages, `⚠` for warnings, `✗` for errors
+- Suppress output with `> /dev/null 2>&1` for install commands
+- Always validate parameters in `main()`
+- Use descriptive function names: `verb_noun()` pattern (e.g., `check_go()`, `install_tool()`)
+

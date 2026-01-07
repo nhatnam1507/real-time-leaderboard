@@ -1,22 +1,33 @@
 #!/bin/bash
 
 # Initialize development environment
-# Installs all required tools and libraries for linting, testing, building, and local full run with docker compose
-# Only installs tools that are missing
+# Usage: ./scripts/init.sh [dev|ci]
+#   dev:  Install all tools and check docker, go (default)
+#   ci:   Only check lint and go installation
 
 set -e
 
-# Check if SILENT mode is enabled (when called as dependency)
-SILENT=${SILENT:-0}
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Add Go bin directory to PATH for checking
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
+# Add Go bin directory to PATH
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
-# Function to echo only if not silent
-echo_if_verbose() {
-    if [ "$SILENT" != "1" ]; then
-        echo "$@"
-    fi
+# Configuration
+GITHOOKS_DIR="$PROJECT_ROOT/.githooks"
+
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 [dev|ci]"
+    echo ""
+    echo "Modes:"
+    echo "  dev  Install all tools and check docker, go (default)"
+    echo "  ci   Only check lint and go installation"
+    exit 1
 }
 
 # Function to check if a command exists (including in Go bin)
@@ -24,122 +35,232 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
-# Check if Go is installed
-if ! command_exists go; then
-    echo "Error: Go is not installed. Please install Go first."
-    exit 1
-fi
-
-TOOLS_INSTALLED=0
-TOOLS_MISSING=0
-
-# Check and install golangci-lint
-if ! command_exists golangci-lint; then
-    echo_if_verbose "Installing golangci-lint..."
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest > /dev/null 2>&1
-    echo_if_verbose "✓ golangci-lint installed"
-    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-else
-    echo_if_verbose "✓ golangci-lint already installed"
-fi
-
-# Check and install migrate tool
-if ! command_exists migrate; then
-    echo_if_verbose "Installing migrate tool..."
-    go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest > /dev/null 2>&1
-    echo_if_verbose "✓ migrate tool installed"
-    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-else
-    echo_if_verbose "✓ migrate tool already installed"
-fi
-
-# Check and install air for hot reload
-if ! command_exists air; then
-    echo_if_verbose "Installing air..."
-    go install github.com/air-verse/air@latest > /dev/null 2>&1
-    echo_if_verbose "✓ air installed"
-    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-else
-    echo_if_verbose "✓ air already installed"
-fi
-
-# Check and install wait4x for service health checking
-if ! command_exists wait4x; then
-    echo_if_verbose "Installing wait4x..."
-    go install wait4x.dev/v3/cmd/wait4x@latest > /dev/null 2>&1
-    echo_if_verbose "✓ wait4x installed"
-    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-else
-    echo_if_verbose "✓ wait4x already installed"
-fi
-
-# Check and install act for local GitHub Actions testing
-if ! command_exists act; then
-    echo_if_verbose "Installing act..."
-    # Install act to Go bin directory (user-accessible, no sudo needed)
-    # Download latest release binary for Linux
-    ACT_VERSION=$(curl -s https://api.github.com/repos/nektos/act/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$ACT_VERSION" ]; then
-        ACT_VERSION="v0.2.60"  # Fallback version
+# Function to check if Go is installed
+check_go() {
+    if ! command_exists go; then
+        echo "Error: Go is not installed. Please install Go first."
+        exit 1
     fi
-    curl -sL "https://github.com/nektos/act/releases/download/${ACT_VERSION}/act_Linux_x86_64.tar.gz" | \
-        tar -xz -C /tmp && \
-        mv /tmp/act $(go env GOPATH)/bin/act && \
-        chmod +x $(go env GOPATH)/bin/act
-    echo_if_verbose "✓ act installed"
-    TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-else
-    echo_if_verbose "✓ act already installed"
-fi
+    echo "✓ Go is installed"
+}
 
-# Verify docker is installed
-if ! command_exists docker; then
-    echo_if_verbose "⚠ Warning: docker is not installed. Docker is required for local full run with docker compose."
-    TOOLS_MISSING=$((TOOLS_MISSING + 1))
-else
-    echo_if_verbose "✓ docker is installed"
-fi
-
-# Verify docker-compose is installed
-if ! command_exists docker-compose && ! docker compose version &> /dev/null 2>&1; then
-    echo_if_verbose "⚠ Warning: docker-compose is not installed. Docker Compose is required for local full run with docker compose."
-    TOOLS_MISSING=$((TOOLS_MISSING + 1))
-else
-    echo_if_verbose "✓ docker-compose is available"
-fi
-
-# Download Go dependencies
-echo_if_verbose "Downloading Go dependencies..."
-go mod download > /dev/null 2>&1
-go mod tidy > /dev/null 2>&1
-echo_if_verbose "✓ Go dependencies downloaded"
-
-# Configure git to use hooks from .githooks directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-GITHOOKS_DIR="$REPO_ROOT/.githooks"
-
-if [ -d "$GITHOOKS_DIR" ]; then
-    # Check if git hooks path is already configured
-    CURRENT_HOOKS_PATH=$(git config --get core.hooksPath 2>/dev/null || echo "")
-    if [ "$CURRENT_HOOKS_PATH" != "$GITHOOKS_DIR" ]; then
-        git config core.hooksPath "$GITHOOKS_DIR"
-        echo_if_verbose "✓ Git hooks configured to use .githooks directory"
+# Function to install and check golangci-lint
+install_golangci_lint() {
+    if ! command_exists golangci-lint; then
+        echo "Installing golangci-lint..."
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest > /dev/null 2>&1
+        echo "✓ golangci-lint installed"
+        return 0
     else
-        echo_if_verbose "✓ Git hooks already configured"
+        echo "✓ golangci-lint already installed"
+        return 1
     fi
-fi
+}
 
-if [ "$SILENT" != "1" ]; then
+# Function to check golangci-lint (for CI)
+check_golangci_lint() {
+    if ! command_exists golangci-lint; then
+        echo "Error: golangci-lint is not installed. Please install it first."
+        exit 1
+    fi
+    echo "✓ golangci-lint is installed"
+}
+
+# Function to install migrate tool
+install_migrate() {
+    if ! command_exists migrate; then
+        echo "Installing migrate tool..."
+        go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest > /dev/null 2>&1
+        echo "✓ migrate tool installed"
+        return 0
+    else
+        echo "✓ migrate tool already installed"
+        return 1
+    fi
+}
+
+# Function to install air for hot reload
+install_air() {
+    if ! command_exists air; then
+        echo "Installing air..."
+        go install github.com/air-verse/air@latest > /dev/null 2>&1
+        echo "✓ air installed"
+        return 0
+    else
+        echo "✓ air already installed"
+        return 1
+    fi
+}
+
+# Function to install wait4x for service health checking
+install_wait4x() {
+    if ! command_exists wait4x; then
+        echo "Installing wait4x..."
+        go install wait4x.dev/v3/cmd/wait4x@latest > /dev/null 2>&1
+        echo "✓ wait4x installed"
+        return 0
+    else
+        echo "✓ wait4x already installed"
+        return 1
+    fi
+}
+
+# Function to install act for local GitHub Actions testing
+install_act() {
+    if ! command_exists act; then
+        echo "Installing act..."
+        # Install act to Go bin directory (user-accessible, no sudo needed)
+        # Download latest release binary for Linux
+        ACT_VERSION=$(curl -s https://api.github.com/repos/nektos/act/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [ -z "$ACT_VERSION" ]; then
+            ACT_VERSION="v0.2.60"  # Fallback version
+        fi
+        curl -sL "https://github.com/nektos/act/releases/download/${ACT_VERSION}/act_Linux_x86_64.tar.gz" | \
+            tar -xz -C /tmp && \
+            mv /tmp/act $(go env GOPATH)/bin/act && \
+            chmod +x $(go env GOPATH)/bin/act
+        echo "✓ act installed"
+        return 0
+    else
+        echo "✓ act already installed"
+        return 1
+    fi
+}
+
+# Function to check docker
+check_docker() {
+    if ! command_exists docker; then
+        echo "⚠ Warning: docker is not installed. Docker is required for local full run with docker compose."
+        return 1
+    else
+        echo "✓ docker is installed"
+        return 0
+    fi
+}
+
+# Function to check docker-compose
+check_docker_compose() {
+    if ! command_exists docker-compose && ! docker compose version &> /dev/null 2>&1; then
+        echo "⚠ Warning: docker-compose is not installed. Docker Compose is required for local full run with docker compose."
+        return 1
+    else
+        echo "✓ docker-compose is available"
+        return 0
+    fi
+}
+
+# Function to download Go dependencies
+download_go_dependencies() {
+    echo "Downloading Go dependencies..."
+    go mod download > /dev/null 2>&1
+    go mod tidy > /dev/null 2>&1
+    echo "✓ Go dependencies downloaded"
+}
+
+# Function to configure git hooks
+configure_git_hooks() {
+    if [ -d "$GITHOOKS_DIR" ]; then
+        # Check if git hooks path is already configured
+        CURRENT_HOOKS_PATH=$(git config --get core.hooksPath 2>/dev/null || echo "")
+        if [ "$CURRENT_HOOKS_PATH" != "$GITHOOKS_DIR" ]; then
+            git config core.hooksPath "$GITHOOKS_DIR"
+            echo "✓ Git hooks configured to use .githooks directory"
+        else
+            echo "✓ Git hooks already configured"
+        fi
+    fi
+}
+
+# Function to initialize development mode
+init_dev() {
+    echo "Initializing development environment..."
     echo ""
+    
+    TOOLS_INSTALLED=0
+    TOOLS_MISSING=0
+    
+    # Check Go
+    check_go
+    echo ""
+    
+    # Install all tools
+    if install_golangci_lint; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    if install_migrate; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    if install_air; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    if install_wait4x; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    if install_act; then TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1)); fi
+    echo ""
+    
+    # Check Docker
+    if ! check_docker; then TOOLS_MISSING=$((TOOLS_MISSING + 1)); fi
+    if ! check_docker_compose; then TOOLS_MISSING=$((TOOLS_MISSING + 1)); fi
+    echo ""
+    
+    # Download Go dependencies
+    download_go_dependencies
+    echo ""
+    
+    # Configure git hooks
+    configure_git_hooks
+    echo ""
+    
+    # Summary
     if [ $TOOLS_INSTALLED -gt 0 ]; then
         echo "Development environment initialized successfully! ($TOOLS_INSTALLED tool(s) installed)"
     else
         echo "Development environment is ready! (all tools already installed)"
     fi
-
+    
     if [ $TOOLS_MISSING -gt 0 ]; then
         echo "⚠ Warning: $TOOLS_MISSING required tool(s) are missing. Some targets may not work."
     fi
-fi
+}
 
+# Function to initialize CI mode
+init_ci() {
+    echo "Initializing CI environment..."
+    echo ""
+    
+    # Check Go
+    check_go
+    echo ""
+    
+    # Check golangci-lint
+    check_golangci_lint
+    echo ""
+    
+    # Download Go dependencies
+    download_go_dependencies
+    echo ""
+    
+    echo "CI environment is ready!"
+}
+
+# Main function - handles CLI input and execution
+main() {
+    # Get mode from first parameter (default to dev)
+    local mode=${1:-dev}
+    
+    # Validate parameter count
+    if [ $# -gt 1 ]; then
+        echo "Error: Too many parameters. Expected 0-1 parameter, got $#"
+        show_usage
+    fi
+    
+    # Execute based on mode
+    case "$mode" in
+        dev)
+            init_dev
+            ;;
+        ci)
+            init_ci
+            ;;
+        *)
+            echo "Error: Invalid mode '$mode'"
+            show_usage
+            ;;
+    esac
+}
+
+# Execute main function with all arguments
+main "$@"
