@@ -45,19 +45,21 @@ ut:
 	@go test ./...
 	@echo "Unit tests completed successfully"
 
-## openapi: Validate OpenAPI 3.0 specification
+## openapi: Generate JSON from YAML and validate OpenAPI 3.0 specification
 openapi:
+	@echo "Generating JSON from YAML..."
+	@go run tools/generate-openapi-json.go api/v1/openapi.yaml api/v1/openapi.json
 	@echo "Validating OpenAPI 3.0 specification..."
 	@if command -v swagger-cli >/dev/null 2>&1; then \
-		swagger-cli validate api/v1/openapi.yaml; \
+		swagger-cli validate api/v1/openapi.yaml && swagger-cli validate api/v1/openapi.json; \
 	elif command -v spectral >/dev/null 2>&1; then \
-		spectral lint api/v1/openapi.yaml; \
+		spectral lint api/v1/openapi.yaml && spectral lint api/v1/openapi.json; \
 	else \
 		echo "⚠ No OpenAPI validator found. Install swagger-cli or spectral for validation."; \
 		echo "  npm install -g @apidevtools/swagger-cli"; \
 		echo "  npm install -g @stoplight/spectral-cli"; \
 	fi
-	@echo "✓ OpenAPI v1 specification is at api/v1/openapi.yaml"
+	@echo "✓ OpenAPI v1 specification (YAML and JSON) validated"
 
 ## check: Run linter, unit tests, and workflow validation locally
 check: lint ut

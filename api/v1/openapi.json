@@ -1,0 +1,704 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorInfo": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "example": "password123",
+            "type": "string"
+          },
+          "username": {
+            "example": "john_doe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "example": "john@example.com",
+            "format": "email",
+            "type": "string"
+          },
+          "password": {
+            "example": "password123",
+            "minLength": 6,
+            "type": "string"
+          },
+          "username": {
+            "example": "john_doe",
+            "maxLength": 50,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "Response": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorInfo"
+          },
+          "message": {
+            "type": "string"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SubmitScoreRequest": {
+        "properties": {
+          "game_id": {
+            "example": "game1",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "example": {
+              "level": 5,
+              "time": 120
+            },
+            "type": "object"
+          },
+          "score": {
+            "example": 1000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "game_id",
+          "score"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "email": "support@example.com",
+      "name": "API Support",
+      "url": "http://www.example.com/support"
+    },
+    "description": "Real-time leaderboard system with WebSocket support for live updates",
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    },
+    "termsOfService": "http://swagger.io/terms/",
+    "title": "Real-Time Leaderboard API",
+    "version": 1
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "description": "Authenticate user with username and password, returns JWT access and refresh tokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Login successful"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Invalid credentials"
+          }
+        },
+        "summary": "Login user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "description": "Refresh access token using a valid refresh token. Returns new access and refresh tokens.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "refresh_token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "refresh_token"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Token refreshed successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Invalid or expired refresh token"
+          }
+        },
+        "summary": "Refresh access token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "description": "Register a new user with username, email, and password. Returns user information and JWT tokens.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "User registered successfully"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "User already exists"
+          }
+        },
+        "summary": "Register a new user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/leaderboard/game/{game_id}": {
+      "get": {
+        "description": "Get paginated leaderboard for a specific game showing top players",
+        "parameters": [
+          {
+            "description": "Game ID",
+            "in": "path",
+            "name": "game_id",
+            "required": true,
+            "schema": {
+              "example": "game1",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Number of top players",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of results to skip",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "example": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Leaderboard retrieved successfully"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get game leaderboard",
+        "tags": [
+          "leaderboard"
+        ]
+      }
+    },
+    "/leaderboard/global": {
+      "get": {
+        "description": "Get paginated global leaderboard showing top players across all games",
+        "parameters": [
+          {
+            "description": "Number of top players",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of results to skip",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "example": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Leaderboard retrieved successfully"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get global leaderboard",
+        "tags": [
+          "leaderboard"
+        ]
+      }
+    },
+    "/leaderboard/rank/{user_id}": {
+      "get": {
+        "description": "Get a user's rank, score, and position in a leaderboard (global or game-specific)",
+        "parameters": [
+          {
+            "description": "User ID",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "example": "user123",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Game ID (empty or 'global' for global leaderboard)",
+            "in": "query",
+            "name": "game_id",
+            "schema": {
+              "example": "game1",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "User rank retrieved successfully"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "User not found in leaderboard"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get user rank",
+        "tags": [
+          "leaderboard"
+        ]
+      }
+    },
+    "/reports/top-players": {
+      "get": {
+        "description": "Get a paginated report of top players, optionally filtered by game and date range. Uses Redis for current data or PostgreSQL for historical data when date range is provided.",
+        "parameters": [
+          {
+            "description": "Game ID (empty or 'global' for global leaderboard)",
+            "in": "query",
+            "name": "game_id",
+            "schema": {
+              "example": "game1",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Start date in RFC3339 format",
+            "in": "query",
+            "name": "start_date",
+            "schema": {
+              "example": "2024-01-01T00:00:00Z",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "End date in RFC3339 format",
+            "in": "query",
+            "name": "end_date",
+            "schema": {
+              "example": "2024-01-31T23:59:59Z",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Number of top players",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of results to skip",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "example": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Report generated successfully"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get top players report",
+        "tags": [
+          "report"
+        ]
+      }
+    },
+    "/scores": {
+      "post": {
+        "description": "Submit a score for a game. Requires authentication. The score will be saved and the leaderboard will be updated.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitScoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Score submitted successfully"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Submit a score",
+        "tags": [
+          "score"
+        ]
+      }
+    },
+    "/scores/me": {
+      "get": {
+        "description": "Get paginated scores for the authenticated user. Optionally filter by game ID.",
+        "parameters": [
+          {
+            "description": "Filter by game ID",
+            "in": "query",
+            "name": "game_id",
+            "schema": {
+              "example": "game1",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Number of results per page",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of results to skip",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "example": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Scores retrieved successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get user scores",
+        "tags": [
+          "score"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "API v1",
+      "url": "/api/v1"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Authentication endpoints",
+      "name": "auth"
+    },
+    {
+      "description": "Score management endpoints",
+      "name": "score"
+    },
+    {
+      "description": "Leaderboard endpoints",
+      "name": "leaderboard"
+    },
+    {
+      "description": "Report endpoints",
+      "name": "report"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "v1",
+      "tags": [
+        "auth",
+        "score",
+        "leaderboard",
+        "report"
+      ]
+    }
+  ]
+}

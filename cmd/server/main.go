@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"real-time-leaderboard/api"
 	"real-time-leaderboard/internal/config"
 	v1Auth "real-time-leaderboard/internal/module/auth/adapters/rest/v1"
 	authApp "real-time-leaderboard/internal/module/auth/application"
@@ -31,11 +32,7 @@ import (
 	redisInfra "real-time-leaderboard/internal/shared/redis"
 	"real-time-leaderboard/internal/shared/response"
 
-	"path/filepath"
-	"strings"
-
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -174,47 +171,23 @@ func setupRouter(
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// OpenAPI 3.0 spec endpoints (versioned)
+	// OpenAPI 3.0 spec endpoints (versioned) - using embedded files
 	router.GET("/api/v1/openapi.yaml", func(c *gin.Context) {
-		openAPIPath := getOpenAPISpecPath()
-		if openAPIPath == "" {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid OpenAPI spec path"})
-			return
-		}
-		// #nosec G304 -- Path is validated and restricted to api/v1 directory
-		data, err := os.ReadFile(openAPIPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read OpenAPI spec"})
-			return
-		}
-		c.Data(http.StatusOK, "application/x-yaml", data)
+		c.Data(http.StatusOK, "application/x-yaml", api.OpenAPIV1YAML)
 	})
 
 	router.GET("/api/v1/openapi.json", func(c *gin.Context) {
-		openAPIPath := getOpenAPISpecPath()
-		if openAPIPath == "" {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid OpenAPI spec path"})
-			return
-		}
-		// #nosec G304 -- Path is validated and restricted to api/v1 directory
-		data, err := os.ReadFile(openAPIPath)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read OpenAPI spec"})
-			return
-		}
-
-		var yamlData interface{}
-		if err := yaml.Unmarshal(data, &yamlData); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse OpenAPI spec"})
-			return
-		}
-
-		c.JSON(http.StatusOK, yamlData)
+		c.Data(http.StatusOK, "application/json", api.OpenAPIV1JSON)
 	})
 
-	// Swagger UI for OpenAPI 3.0 (with version selection)
-	router.StaticFile("/swagger", "./api/swagger-ui.html")
-	router.StaticFile("/swagger/index.html", "./api/swagger-ui.html")
+	// Swagger UI for OpenAPI 3.0 (with version selection) - using embedded file
+	router.GET("/swagger", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
+	})
+
+	router.GET("/swagger/index.html", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
+	})
 
 	// API v1 routes
 	api := router.Group("/api/v1")
@@ -239,32 +212,4 @@ func setupRouter(
 	router.GET("/ws/leaderboard", websocket.HandleWebSocket(leaderboardHub))
 
 	return router
-}
-
-// getOpenAPISpecPath returns the validated path to the OpenAPI v1 spec file.
-// It ensures the path is within the api/v1 directory to prevent path traversal attacks.
-func getOpenAPISpecPath() string {
-	basePath := filepath.Join(".", "api", "v1")
-	specPath := filepath.Join(basePath, "openapi.yaml")
-
-	// Clean the path to remove any .. or . components
-	cleanedPath := filepath.Clean(specPath)
-
-	// Get absolute paths for comparison
-	absBase, err := filepath.Abs(basePath)
-	if err != nil {
-		return ""
-	}
-	absSpec, err := filepath.Abs(cleanedPath)
-	if err != nil {
-		return ""
-	}
-
-	// Ensure the spec path is within the base directory
-	// This prevents path traversal attacks
-	if !strings.HasPrefix(absSpec, absBase) {
-		return ""
-	}
-
-	return cleanedPath
 }

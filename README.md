@@ -111,11 +111,13 @@ real-time-leaderboard/
 │       ├── leaderboard/            # Leaderboard Module
 │       └── report/                 # Report Module
 ├── docs/                           # Documentation
-├── scripts/                        # Utility scripts
+├── scripts/                        # Utility scripts (shell scripts)
 │   ├── init.sh                    # Initialize development environment (dev/ci modes)
 │   ├── run.sh                     # Application startup script (dev/all modes)
 │   ├── migrate.sh                 # Database migration tool
 │   └── validate-workflows.sh      # GitHub Actions workflow validation
+├── tools/                          # Build tools (Go tools)
+│   └── generate-openapi-json.go   # OpenAPI YAML to JSON converter
 ├── .githooks/                     # Git hooks (version controlled)
 │   └── pre-push                   # Pre-push hook for code quality checks
 ├── .github/
@@ -158,10 +160,14 @@ The API is documented using OpenAPI 3.0 specification (spec-first approach):
 - **OpenAPI YAML**: http://localhost:8080/api/v1/openapi.yaml
 - **OpenAPI JSON**: http://localhost:8080/api/v1/openapi.json
 
-To validate the OpenAPI specification:
+To generate JSON from YAML and validate the OpenAPI specification:
 ```bash
 make openapi
 ```
+
+This will:
+- Generate `api/v1/openapi.json` from `api/v1/openapi.yaml` (YAML is the source of truth)
+- Validate both YAML and JSON versions
 
 ## Common Commands
 
