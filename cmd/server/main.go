@@ -162,7 +162,7 @@ func setupRouter(
 	router.GET("/ws/leaderboard", websocket.HandleWebSocket(leaderboardHub))
 
 	// Setup API router (with middleware, grouped by /api)
-	setupApiRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
+	setupAPIRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
 
 	// Setup docs router (without middleware, prefixed by /docs)
 	setupDocsRouter(router)
@@ -175,7 +175,7 @@ func setupRouter(
 	return router
 }
 
-func setupApiRouter(
+func setupAPIRouter(
 	router *gin.Engine,
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
