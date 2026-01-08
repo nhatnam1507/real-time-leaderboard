@@ -1,15 +1,16 @@
 # Real-Time Leaderboard System
 
-A high-performance, modular real-time leaderboard system built with Go, following Clean Architecture principles. The system ranks users based on their scores across various games and provides real-time updates via WebSocket.
+A high-performance, modular real-time leaderboard system built with Go, following Clean Architecture principles. The system ranks users based on their scores across various games.
 
 ## Features
 
 - **User Authentication**: JWT-based authentication with access and refresh tokens
 - **Score Submission**: Submit scores for different games with metadata support
-- **Real-Time Leaderboards**: Global and game-specific leaderboards with WebSocket updates
+- **Real-Time Leaderboards**: Global and game-specific leaderboards with live updates via Server-Sent Events (SSE)
 - **User Rankings**: Query user rankings in any leaderboard
 - **Top Players Reports**: Generate reports with optional date range filtering
 - **Redis Sorted Sets**: Efficient leaderboard storage and queries using Redis sorted sets
+- **Redis Pub/Sub**: Real-time notifications for leaderboard updates without polling
 - **Clean Architecture**: Modular, testable, and maintainable code structure
 - **Microservice Ready**: Each module is self-contained and can be extracted to a microservice
 

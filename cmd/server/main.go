@@ -17,7 +17,6 @@ import (
 	authJWT "real-time-leaderboard/internal/module/auth/infrastructure/jwt"
 	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
 	v1Leaderboard "real-time-leaderboard/internal/module/leaderboard/adapters/rest/v1"
-	"real-time-leaderboard/internal/module/leaderboard/adapters/websocket"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
 	leaderboardInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/repository"
 	v1Report "real-time-leaderboard/internal/module/report/adapters/rest/v1"
@@ -80,22 +79,24 @@ func main() {
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
-	scoreUseCase := scoreApp.NewScoreUseCase(scoreRepo, scoreLeaderboardRepo, l)
 	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, l)
 	reportUseCase := reportApp.NewReportUseCase(reportRepo, l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
-	scoreHandler := v1Score.NewHandler(scoreUseCase)
-	leaderboardHandler := v1Leaderboard.NewHandler(leaderboardUseCase)
+	leaderboardHandler := v1Leaderboard.NewHandler(leaderboardUseCase, redisClient.GetClient())
 	reportHandler := v1Report.NewHandler(reportUseCase)
 
-	// Initialize WebSocket hub
-	leaderboardHub := websocket.NewHub(leaderboardUseCase)
-	go leaderboardHub.Run()
+	// Initialize score use case (no broadcaster needed - uses Redis pub/sub)
+	scoreUseCase := scoreApp.NewScoreUseCase(
+		scoreRepo,
+		scoreLeaderboardRepo,
+		l,
+	)
+	scoreHandler := v1Score.NewHandler(scoreUseCase)
 
 	// Setup router
-	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler, leaderboardHub)
+	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -141,7 +142,6 @@ func setupRouter(
 	scoreHandler *v1Score.Handler,
 	leaderboardHandler *v1Leaderboard.Handler,
 	reportHandler *v1Report.Handler,
-	leaderboardHub *websocket.Hub,
 ) *gin.Engine {
 	// Set gin mode based on config
 	if cfg.Logger.Level == "debug" {
@@ -157,9 +157,6 @@ func setupRouter(
 	router.GET("/health", func(c *gin.Context) {
 		response.Success(c, gin.H{"status": "ok"}, "Service is healthy")
 	})
-
-	// WebSocket route
-	router.GET("/ws/leaderboard", websocket.HandleWebSocket(leaderboardHub))
 
 	// Setup API router (with middleware, grouped by /api)
 	setupAPIRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)

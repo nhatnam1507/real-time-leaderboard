@@ -4,7 +4,7 @@ The system follows **Clean Architecture** principles with clear layer separation
 
 - **Domain Layer**: Core entities and repository interfaces (no dependencies)
 - **Application Layer**: Use cases and business logic orchestration
-- **Adapters Layer**: HTTP/WebSocket handlers (input adapters)
+- **Adapters Layer**: HTTP handlers (input adapters)
 - **Infrastructure Layer**: Repository implementations, external services (output adapters)
 
 ## System Architecture Diagram
@@ -18,7 +18,6 @@ graph TB
     
     subgraph api[API Gateway Layer]
         Router[HTTP Router]
-        WSRouter[WebSocket Router]
     end
     
     subgraph authModule[Auth Module - Self Contained]
@@ -38,7 +37,7 @@ graph TB
     end
     
     subgraph leaderboardModule[Leaderboard Module - Self Contained]
-        LeaderboardAdapter[Leaderboard Adapters HTTP/WS]
+        LeaderboardAdapter[Leaderboard Adapters HTTP]
         LeaderboardApplication[Leaderboard Application Use Cases]
         LeaderboardDomain[Leaderboard Domain Entities]
         LeaderboardDomainRepo[Leaderboard Repository Interface]
@@ -69,13 +68,11 @@ graph TB
     
     WebClient --> Router
     MobileClient --> Router
-    WebClient --> WSRouter
     
     Router --> AuthAdapter
     Router --> ScoreAdapter
     Router --> LeaderboardAdapter
     Router --> ReportAdapter
-    WSRouter --> LeaderboardAdapter
     
     AuthAdapter --> AuthApplication
     AuthApplication --> AuthDomain
@@ -132,32 +129,69 @@ graph TB
 
 ## Data Flow Example
 
+### Score Submission and Real-Time Leaderboard Updates
+
 ```mermaid
 sequenceDiagram
     participant Client
     participant ScoreAdapter
     participant ScoreApplication
-    participant ScoreDomain
     participant ScoreInfra
     participant Redis
-    participant LeaderboardApplication
-    participant WSClient
+    participant LeaderboardAdapter
+    participant SSEClient
     
+    Note over Client,SSEClient: Score Submission Flow
     Client->>ScoreAdapter: POST /api/v1/scores
-    ScoreAdapter->>ScoreDomain: Parse request to Score entity
     ScoreAdapter->>ScoreApplication: SubmitScoreUseCase.Execute(score)
-    ScoreApplication->>ScoreDomain: Validate score entity
     ScoreApplication->>ScoreInfra: SaveScore(score)
     ScoreInfra->>Postgres: INSERT INTO scores
     ScoreApplication->>Redis: ZADD leaderboard:global score userId
     ScoreApplication->>Redis: ZADD leaderboard:{gameId} score userId
+    ScoreApplication->>Redis: PUBLISH leaderboard:updates:global "updated"
+    ScoreApplication->>Redis: PUBLISH leaderboard:updates:{gameId} "updated"
     ScoreApplication-->>ScoreAdapter: Score entity
     ScoreAdapter-->>Client: 200 OK (Score entity as JSON)
     
-    Note over Redis,LeaderboardApplication: Leaderboard module queries Redis
-    LeaderboardApplication->>Redis: ZREVRANGE leaderboard:global 0 9
-    LeaderboardApplication->>WSClient: Broadcast updated leaderboard
+    Note over SSEClient,Redis: Real-Time Leaderboard Updates (SSE)
+    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard/global (SSE)
+    LeaderboardAdapter->>Redis: SUBSCRIBE leaderboard:updates:global
+    LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
+    LeaderboardAdapter-->>SSEClient: data: {leaderboard JSON}\n\n (initial)
+    
+    Note over Redis,SSEClient: When score is submitted...
+    Redis-->>LeaderboardAdapter: PUBLISH notification received
+    LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
+    LeaderboardAdapter-->>SSEClient: data: {updated leaderboard JSON}\n\n
 ```
+
+**Key Points**:
+- Score module updates Redis sorted sets and publishes notifications
+- Leaderboard SSE handlers subscribe to Redis pub/sub channels
+- No polling - updates are pushed immediately when scores change
+- No cross-module dependencies - communication via Redis (shared infrastructure)
+
+### Detailed Flow
+
+1. **Score Submission**:
+   - User submits score via `POST /api/v1/scores`
+   - Score is saved to PostgreSQL for historical records
+   - Score is added/updated in Redis sorted sets (`ZADD` command)
+   - Notification is published to Redis pub/sub channels (`PUBLISH` command)
+
+2. **Real-Time Updates**:
+   - SSE clients connect to leaderboard endpoints (`GET /api/v1/leaderboard/global` or `/game/:game_id`)
+   - SSE handlers subscribe to corresponding Redis pub/sub channels (`SUBSCRIBE` command)
+   - Initial leaderboard data is fetched from Redis and sent to client
+   - When a notification is received from pub/sub:
+     - Handler fetches fresh leaderboard data from Redis sorted sets (`ZREVRANGE` command)
+     - Updated leaderboard is sent to client via SSE (`data: {json}\n\n` format)
+
+3. **Benefits**:
+   - **Real-time**: Updates pushed immediately when scores change (no polling delay)
+   - **Efficient**: Only fetches data when there's an actual update
+   - **Decoupled**: Score and leaderboard modules communicate via Redis (shared infrastructure)
+   - **Scalable**: Works across multiple server instances - all instances receive pub/sub notifications
 
 ## Architecture Principles
 
@@ -169,7 +203,7 @@ Each module follows Clean Architecture with four distinct layers:
 
 2. **Application Layer** (`application/`): Contains use cases that orchestrate business logic. It depends only on the domain layer and defines interfaces for infrastructure.
 
-3. **Adapters Layer** (`adapters/`): Contains HTTP/WebSocket handlers that translate external requests into domain entities and use cases. This is the input adapter layer.
+3. **Adapters Layer** (`adapters/`): Contains HTTP handlers that translate external requests into domain entities and use cases. This is the input adapter layer.
 
 4. **Infrastructure Layer** (`infrastructure/`): Contains implementations of repositories and external service integrations (database, Redis, etc.). This is the output adapter layer.
 
@@ -178,7 +212,7 @@ Each module follows Clean Architecture with four distinct layers:
 Each module (auth, score, leaderboard, report) is self-contained with its own:
 - Domain entities and business rules
 - Use cases and application logic
-- HTTP/WebSocket adapters
+- HTTP adapters
 - Infrastructure implementations
 
 This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.

@@ -27,6 +27,11 @@ func (r *RedisLeaderboardRepository) UpdateScore(ctx context.Context, gameID str
 	if err != nil {
 		return fmt.Errorf("failed to update score in leaderboard: %w", err)
 	}
+
+	// Publish update notification to Redis pub/sub
+	channel := fmt.Sprintf("leaderboard:updates:%s", gameID)
+	r.client.Publish(ctx, channel, "updated")
+
 	return nil
 }
 
@@ -40,5 +45,9 @@ func (r *RedisLeaderboardRepository) UpdateGlobalScore(ctx context.Context, user
 	if err != nil {
 		return fmt.Errorf("failed to update global score: %w", err)
 	}
+
+	// Publish update notification to Redis pub/sub
+	r.client.Publish(ctx, "leaderboard:updates:global", "updated")
+
 	return nil
 }

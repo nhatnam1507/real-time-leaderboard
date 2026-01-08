@@ -254,7 +254,6 @@ The Air configuration is automatically used when running `make start-dev` or `./
 - **Authentication**: JWT (github.com/golang-jwt/jwt/v5)
 - **Database Driver**: pgx/v5
 - **Redis Client**: go-redis/v9
-- **WebSocket**: Gorilla WebSocket
 - **Validation**: go-playground/validator/v10
 - **Logging**: zerolog
 - **API Documentation**: OpenAPI 3.0 (spec-first approach)

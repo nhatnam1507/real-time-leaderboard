@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Real-Time Leaderboard API
   version: 1.0
-  description: Real-time leaderboard system with WebSocket support for live updates
+  description: Real-time leaderboard system with REST API for score submission and Server-Sent Events (SSE) for live leaderboard updates
   contact:
     name: API Support
     url: http://www.example.com/support
@@ -208,8 +208,12 @@ paths:
     get:
       tags:
         - leaderboard
-      summary: Get global leaderboard
-      description: Get paginated global leaderboard showing top players across all games
+      summary: Get global leaderboard (SSE stream)
+      description: |
+        Server-Sent Events (SSE) stream for real-time global leaderboard updates.
+        Returns `text/event-stream` content type. Clients receive initial leaderboard data
+        and automatic updates when scores change. Updates are pushed via Redis pub/sub
+        notifications - no polling required.
       parameters:
         - name: limit
           in: query
@@ -230,11 +234,14 @@ paths:
             example: 0
       responses:
         '200':
-          description: Leaderboard retrieved successfully
+          description: |
+            SSE stream with leaderboard data. Content-Type: text/event-stream.
+            Initial leaderboard sent immediately, followed by updates when scores change.
           content:
-            application/json:
+            text/event-stream:
               schema:
-                $ref: '#/components/schemas/Response'
+                type: string
+                example: "data: {\"game_id\":\"global\",\"entries\":[...],\"total\":100}\n\n"
         '500':
           description: Internal server error
           content:
@@ -246,8 +253,12 @@ paths:
     get:
       tags:
         - leaderboard
-      summary: Get game leaderboard
-      description: Get paginated leaderboard for a specific game showing top players
+      summary: Get game leaderboard (SSE stream)
+      description: |
+        Server-Sent Events (SSE) stream for real-time game-specific leaderboard updates.
+        Returns `text/event-stream` content type. Clients receive initial leaderboard data
+        and automatic updates when scores change for this game. Updates are pushed via
+        Redis pub/sub notifications - no polling required.
       parameters:
         - name: game_id
           in: path
@@ -275,11 +286,14 @@ paths:
             example: 0
       responses:
         '200':
-          description: Leaderboard retrieved successfully
+          description: |
+            SSE stream with leaderboard data. Content-Type: text/event-stream.
+            Initial leaderboard sent immediately, followed by updates when scores change for this game.
           content:
-            application/json:
+            text/event-stream:
               schema:
-                $ref: '#/components/schemas/Response'
+                type: string
+                example: "data: {\"game_id\":\"game1\",\"entries\":[...],\"total\":50}\n\n"
         '500':
           description: Internal server error
           content:

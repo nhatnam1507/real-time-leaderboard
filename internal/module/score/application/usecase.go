@@ -66,7 +66,7 @@ func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req Subm
 	}
 
 	if highestScore != nil {
-		// Update game-specific leaderboard
+		// Update game-specific leaderboard (publishes to Redis pub/sub)
 		if err := uc.leaderboardRepo.UpdateScore(ctx, req.GameID, userID, highestScore.Score); err != nil {
 			uc.logger.Errorf(ctx, "Failed to update game leaderboard: %v", err)
 			// Don't fail the request if leaderboard update fails
