@@ -143,73 +143,103 @@ func setupRouter(
 	reportHandler *v1Report.Handler,
 	leaderboardHub *websocket.Hub,
 ) *gin.Engine {
+	// Set gin mode based on config
 	if cfg.Logger.Level == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Create router with correct settings
 	router := gin.New()
-
-	// Middleware (order matters!)
-	// 1. Recovery - First to catch panics from all other middleware
-	// 2. RequestID - Early to generate ID for all subsequent middleware and logs
-	// 3. CORS - After RequestID so responses include request ID, but early for OPTIONS handling
-	// 4. RequestLogger - Last to log after request processing completes
-	router.Use(middleware.Recovery(l))
-	router.Use(middleware.RequestID())
-	router.Use(middleware.CORS())
-	router.Use(middleware.RequestLogger(l))
-
-	// 404 Not Found handler
-	router.NoRoute(func(c *gin.Context) {
-		response.ErrorWithStatus(c, http.StatusNotFound, response.CodeNotFound, "Route not found")
-	})
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// OpenAPI 3.0 spec endpoints (versioned) - using embedded files
-	router.GET("/api/v1/openapi.yaml", func(c *gin.Context) {
-		c.Data(http.StatusOK, "application/x-yaml", api.OpenAPIV1YAML)
-	})
-
-	router.GET("/api/v1/openapi.json", func(c *gin.Context) {
-		c.Data(http.StatusOK, "application/json", api.OpenAPIV1JSON)
-	})
-
-	// Swagger UI for OpenAPI 3.0 (with version selection) - using embedded file
-	router.GET("/swagger", func(c *gin.Context) {
-		c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
-	})
-
-	router.GET("/swagger/index.html", func(c *gin.Context) {
-		c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
-	})
-
-	// API v1 routes
-	api := router.Group("/api/v1")
-	{
-		// Auth routes (no auth required)
-		authHandler.RegisterRoutes(api)
-
-		// Protected routes
-		authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken)
-		protected := api.Group("")
-		protected.Use(authMiddleware.RequireAuth())
-		{
-			scoreHandler.RegisterRoutes(protected)
-		}
-
-		// Public routes
-		leaderboardHandler.RegisterRoutes(api)
-		reportHandler.RegisterRoutes(api)
-	}
-
 	// WebSocket route
 	router.GET("/ws/leaderboard", websocket.HandleWebSocket(leaderboardHub))
 
+	// Setup API router (with middleware, grouped by /api)
+	setupApiRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
+
+	// Setup docs router (without middleware, prefixed by /docs)
+	setupDocsRouter(router)
+
+	// 404 Not Found handler for routes outside /api and /docs
+	router.NoRoute(func(c *gin.Context) {
+		response.ErrorWithStatus(c, http.StatusNotFound, response.CodeNotFound, "Route not found")
+	})
+
 	return router
+}
+
+func setupApiRouter(
+	router *gin.Engine,
+	l *logger.Logger,
+	authUseCase *authApp.AuthUseCase,
+	authHandler *v1Auth.Handler,
+	scoreHandler *v1Score.Handler,
+	leaderboardHandler *v1Leaderboard.Handler,
+	reportHandler *v1Report.Handler,
+) {
+	// Group API routes by /api prefix
+	apiGroup := router.Group("/api")
+
+	// Middleware (order matters!)
+	// 1. Recovery - First to catch panics from all other middleware
+	// 2. RequestID - Early to generate ID for all subsequent middleware and logs
+	// 3. CORS - After RequestID so responses include request ID, but early for OPTIONS handling
+	// 4. RequestLogger - Last to log after request processing completes
+	apiGroup.Use(middleware.Recovery(l))
+	apiGroup.Use(middleware.RequestID())
+	apiGroup.Use(middleware.CORS())
+	apiGroup.Use(middleware.RequestLogger(l))
+
+	// API v1 routes
+	v1Group := apiGroup.Group("/v1")
+
+	// Public routes group (no auth required)
+	v1PublicGroup := v1Group.Group("")
+	{
+		// OpenAPI 3.0 spec endpoints (versioned) - using embedded files
+		v1PublicGroup.GET("/openapi.yaml", func(c *gin.Context) {
+			c.Data(http.StatusOK, "application/x-yaml", api.OpenAPIV1YAML)
+		})
+
+		v1PublicGroup.GET("/openapi.json", func(c *gin.Context) {
+			c.Data(http.StatusOK, "application/json", api.OpenAPIV1JSON)
+		})
+
+		// Auth routes (no auth required)
+		authHandler.RegisterRoutes(v1PublicGroup)
+
+		// Public routes
+		leaderboardHandler.RegisterRoutes(v1PublicGroup)
+		reportHandler.RegisterRoutes(v1PublicGroup)
+	}
+
+	// Protected routes group (auth required)
+	authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken)
+	v1ProtectedGroup := v1Group.Group("")
+	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
+	{
+		scoreHandler.RegisterRoutes(v1ProtectedGroup)
+	}
+}
+
+func setupDocsRouter(router *gin.Engine) {
+	// Swagger UI for OpenAPI 3.0 (with version selection) - using embedded file
+	// Prefixed by /docs, no middleware applied
+	docsGroup := router.Group("/docs")
+	{
+		docsGroup.GET("", func(c *gin.Context) {
+			c.Redirect(http.StatusMovedPermanently, "/docs/index.html")
+		})
+
+		docsGroup.GET("/index.html", func(c *gin.Context) {
+			c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
+		})
+	}
 }

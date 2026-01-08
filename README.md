@@ -156,7 +156,7 @@ For detailed documentation, see the [docs](./docs/) folder:
 The API is documented using OpenAPI 3.0 specification (spec-first approach):
 
 - **OpenAPI Spec**: `api/v1/openapi.yaml` - The source of truth for API documentation
-- **Swagger UI**: http://localhost:8080/swagger/index.html - Interactive API documentation
+- **Swagger UI**: http://localhost:8080/docs/index.html - Interactive API documentation
 - **OpenAPI YAML**: http://localhost:8080/api/v1/openapi.yaml
 - **OpenAPI JSON**: http://localhost:8080/api/v1/openapi.json
 
@@ -168,6 +168,8 @@ make openapi
 This will:
 - Generate `api/v1/openapi.json` from `api/v1/openapi.yaml` (YAML is the source of truth)
 - Validate both YAML and JSON versions
+
+**Note**: The OpenAPI spec is the single source of truth. All API documentation is maintained in the spec file, not in code annotations.
 
 ## Common Commands
 
