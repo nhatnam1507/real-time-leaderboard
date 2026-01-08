@@ -155,7 +155,7 @@ func setupRouter(
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		response.Success(c, gin.H{"status": "ok"}, "Service is healthy")
 	})
 
 	// WebSocket route
