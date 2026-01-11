@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Real-Time Leaderboard API
-  version: 1.0
+  version: "1.0"
   description: Real-time leaderboard system with REST API for score submission and Server-Sent Events (SSE) for live leaderboard updates
   contact:
     name: API Support
@@ -19,20 +19,14 @@ servers:
 tags:
   - name: auth
     description: Authentication endpoints
-  - name: score
-    description: Score management endpoints
   - name: leaderboard
-    description: Leaderboard endpoints
-  - name: report
-    description: Report endpoints
+    description: Leaderboard and score endpoints
 
 x-tagGroups:
   - name: v1
     tags:
       - auth
-      - score
       - leaderboard
-      - report
 
 paths:
   /auth/register:
@@ -124,12 +118,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Response'
 
-  /scores:
+  /score:
     post:
       tags:
-        - score
+        - leaderboard
       summary: Submit a score
-      description: Submit a score for a game. Requires authentication. The score will be saved and the leaderboard will be updated.
+      description: Submit a score. Requires authentication. The score will be saved and the leaderboard will be updated.
       security:
         - BearerAuth: []
       requestBody:
@@ -158,59 +152,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Response'
 
-  /scores/me:
-    get:
-      tags:
-        - score
-      summary: Get user scores
-      description: Get paginated scores for the authenticated user. Optionally filter by game ID.
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: game_id
-          in: query
-          description: Filter by game ID
-          schema:
-            type: string
-            example: game1
-        - name: limit
-          in: query
-          description: Number of results per page
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 10
-            example: 10
-        - name: offset
-          in: query
-          description: Number of results to skip
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-            example: 0
-      responses:
-        '200':
-          description: Scores retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-
-  /leaderboard/global:
+  /leaderboard:
     get:
       tags:
         - leaderboard
-      summary: Get global leaderboard (SSE stream)
+      summary: Get leaderboard (SSE stream)
       description: |
-        Server-Sent Events (SSE) stream for real-time global leaderboard updates.
+        Server-Sent Events (SSE) stream for real-time leaderboard updates.
         Returns `text/event-stream` content type. Clients receive initial leaderboard data
         and automatic updates when scores change. Updates are pushed via Redis pub/sub
         notifications - no polling required.
@@ -241,157 +189,7 @@ paths:
             text/event-stream:
               schema:
                 type: string
-                example: "data: {\"game_id\":\"global\",\"entries\":[...],\"total\":100}\n\n"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-
-  /leaderboard/game/{game_id}:
-    get:
-      tags:
-        - leaderboard
-      summary: Get game leaderboard (SSE stream)
-      description: |
-        Server-Sent Events (SSE) stream for real-time game-specific leaderboard updates.
-        Returns `text/event-stream` content type. Clients receive initial leaderboard data
-        and automatic updates when scores change for this game. Updates are pushed via
-        Redis pub/sub notifications - no polling required.
-      parameters:
-        - name: game_id
-          in: path
-          required: true
-          description: Game ID
-          schema:
-            type: string
-            example: game1
-        - name: limit
-          in: query
-          description: Number of top players
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 10
-            example: 10
-        - name: offset
-          in: query
-          description: Number of results to skip
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-            example: 0
-      responses:
-        '200':
-          description: |
-            SSE stream with leaderboard data. Content-Type: text/event-stream.
-            Initial leaderboard sent immediately, followed by updates when scores change for this game.
-          content:
-            text/event-stream:
-              schema:
-                type: string
-                example: "data: {\"game_id\":\"game1\",\"entries\":[...],\"total\":50}\n\n"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-
-  /leaderboard/rank/{user_id}:
-    get:
-      tags:
-        - leaderboard
-      summary: Get user rank
-      description: Get a user's rank, score, and position in a leaderboard (global or game-specific)
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          description: User ID
-          schema:
-            type: string
-            example: user123
-        - name: game_id
-          in: query
-          description: Game ID (empty or 'global' for global leaderboard)
-          schema:
-            type: string
-            example: game1
-      responses:
-        '200':
-          description: User rank retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-        '404':
-          description: User not found in leaderboard
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
-
-  /reports/top-players:
-    get:
-      tags:
-        - report
-      summary: Get top players report
-      description: Get a paginated report of top players, optionally filtered by game and date range. Uses Redis for current data or PostgreSQL for historical data when date range is provided.
-      parameters:
-        - name: game_id
-          in: query
-          description: Game ID (empty or 'global' for global leaderboard)
-          schema:
-            type: string
-            example: game1
-        - name: start_date
-          in: query
-          description: Start date in RFC3339 format
-          schema:
-            type: string
-            format: date-time
-            example: 2024-01-01T00:00:00Z
-        - name: end_date
-          in: query
-          description: End date in RFC3339 format
-          schema:
-            type: string
-            format: date-time
-            example: 2024-01-31T23:59:59Z
-        - name: limit
-          in: query
-          description: Number of top players
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 10
-            example: 10
-        - name: offset
-          in: query
-          description: Number of results to skip
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-            example: 0
-      responses:
-        '200':
-          description: Report generated successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
+                example: "data: {\"entries\":[...],\"total\":100}\n\n"
         '500':
           description: Internal server error
           content:
@@ -444,12 +242,8 @@ components:
     SubmitScoreRequest:
       type: object
       required:
-        - game_id
         - score
       properties:
-        game_id:
-          type: string
-          example: game1
         score:
           type: integer
           minimum: 0

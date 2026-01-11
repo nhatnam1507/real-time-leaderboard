@@ -1,15 +1,16 @@
 //go:build ignore
 // +build ignore
 
-// This script generates JSON version of OpenAPI spec from YAML
+// This script generates JSON version of OpenAPI spec from YAML and validates it using kin-openapi
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 
-	"gopkg.in/yaml.v3"
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 func main() {
@@ -21,22 +22,24 @@ func main() {
 	yamlFile := os.Args[1]
 	jsonFile := os.Args[2]
 
-	// Read YAML file
-	yamlData, err := os.ReadFile(yamlFile)
+	ctx := context.Background()
+
+	// Load and validate YAML file using kin-openapi
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromFile(yamlFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading YAML file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading OpenAPI YAML file: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Parse YAML
-	var data interface{}
-	if err := yaml.Unmarshal(yamlData, &data); err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing YAML: %v\n", err)
+	// Validate the OpenAPI specification
+	if err := doc.Validate(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Error validating OpenAPI specification: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Convert to JSON
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error converting to JSON: %v\n", err)
 		os.Exit(1)
@@ -48,5 +51,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Generated %s from %s\n", jsonFile, yamlFile)
+	// Validate the generated JSON file
+	jsonDoc, err := loader.LoadFromFile(jsonFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading generated JSON file: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := jsonDoc.Validate(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Error validating generated JSON file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Generated and validated %s from %s\n", jsonFile, yamlFile)
 }

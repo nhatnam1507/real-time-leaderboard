@@ -79,10 +79,6 @@
       },
       "SubmitScoreRequest": {
         "properties": {
-          "game_id": {
-            "example": "game1",
-            "type": "string"
-          },
           "metadata": {
             "additionalProperties": true,
             "example": {
@@ -98,7 +94,6 @@
           }
         },
         "required": [
-          "game_id",
           "score"
         ],
         "type": "object"
@@ -118,14 +113,14 @@
       "name": "API Support",
       "url": "http://www.example.com/support"
     },
-    "description": "Real-time leaderboard system with WebSocket support for live updates",
+    "description": "Real-time leaderboard system with REST API for score submission and Server-Sent Events (SSE) for live leaderboard updates",
     "license": {
       "name": "Apache 2.0",
       "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
     },
     "termsOfService": "http://swagger.io/terms/",
     "title": "Real-Time Leaderboard API",
-    "version": 1
+    "version": "1.0"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -270,75 +265,9 @@
         ]
       }
     },
-    "/leaderboard/game/{game_id}": {
+    "/leaderboard": {
       "get": {
-        "description": "Get paginated leaderboard for a specific game showing top players",
-        "parameters": [
-          {
-            "description": "Game ID",
-            "in": "path",
-            "name": "game_id",
-            "required": true,
-            "schema": {
-              "example": "game1",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Number of top players",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 10,
-              "example": 10,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Number of results to skip",
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "default": 0,
-              "example": 0,
-              "minimum": 0,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Leaderboard retrieved successfully"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Get game leaderboard",
-        "tags": [
-          "leaderboard"
-        ]
-      }
-    },
-    "/leaderboard/global": {
-      "get": {
-        "description": "Get paginated global leaderboard showing top players across all games",
+        "description": "Server-Sent Events (SSE) stream for real-time leaderboard updates.\nReturns `text/event-stream` content type. Clients receive initial leaderboard data\nand automatic updates when scores change. Updates are pushed via Redis pub/sub\nnotifications - no polling required.\n",
         "parameters": [
           {
             "description": "Number of top players",
@@ -367,13 +296,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/Response"
+                  "example": "data: {\"entries\":[...],\"total\":100}\n\n",
+                  "type": "string"
                 }
               }
             },
-            "description": "Leaderboard retrieved successfully"
+            "description": "SSE stream with leaderboard data. Content-Type: text/event-stream.\nInitial leaderboard sent immediately, followed by updates when scores change.\n"
           },
           "500": {
             "content": {
@@ -386,162 +316,15 @@
             "description": "Internal server error"
           }
         },
-        "summary": "Get global leaderboard",
+        "summary": "Get leaderboard (SSE stream)",
         "tags": [
           "leaderboard"
         ]
       }
     },
-    "/leaderboard/rank/{user_id}": {
-      "get": {
-        "description": "Get a user's rank, score, and position in a leaderboard (global or game-specific)",
-        "parameters": [
-          {
-            "description": "User ID",
-            "in": "path",
-            "name": "user_id",
-            "required": true,
-            "schema": {
-              "example": "user123",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Game ID (empty or 'global' for global leaderboard)",
-            "in": "query",
-            "name": "game_id",
-            "schema": {
-              "example": "game1",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "User rank retrieved successfully"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "User not found in leaderboard"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Get user rank",
-        "tags": [
-          "leaderboard"
-        ]
-      }
-    },
-    "/reports/top-players": {
-      "get": {
-        "description": "Get a paginated report of top players, optionally filtered by game and date range. Uses Redis for current data or PostgreSQL for historical data when date range is provided.",
-        "parameters": [
-          {
-            "description": "Game ID (empty or 'global' for global leaderboard)",
-            "in": "query",
-            "name": "game_id",
-            "schema": {
-              "example": "game1",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Start date in RFC3339 format",
-            "in": "query",
-            "name": "start_date",
-            "schema": {
-              "example": "2024-01-01T00:00:00Z",
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "description": "End date in RFC3339 format",
-            "in": "query",
-            "name": "end_date",
-            "schema": {
-              "example": "2024-01-31T23:59:59Z",
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Number of top players",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 10,
-              "example": 10,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Number of results to skip",
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "default": 0,
-              "example": 0,
-              "minimum": 0,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Report generated successfully"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Get top players report",
-        "tags": [
-          "report"
-        ]
-      }
-    },
-    "/scores": {
+    "/score": {
       "post": {
-        "description": "Submit a score for a game. Requires authentication. The score will be saved and the leaderboard will be updated.",
+        "description": "Submit a score. Requires authentication. The score will be saved and the leaderboard will be updated.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -591,77 +374,7 @@
         ],
         "summary": "Submit a score",
         "tags": [
-          "score"
-        ]
-      }
-    },
-    "/scores/me": {
-      "get": {
-        "description": "Get paginated scores for the authenticated user. Optionally filter by game ID.",
-        "parameters": [
-          {
-            "description": "Filter by game ID",
-            "in": "query",
-            "name": "game_id",
-            "schema": {
-              "example": "game1",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Number of results per page",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 10,
-              "example": 10,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Number of results to skip",
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "default": 0,
-              "example": 0,
-              "minimum": 0,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Scores retrieved successfully"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Get user scores",
-        "tags": [
-          "score"
+          "leaderboard"
         ]
       }
     }
@@ -678,16 +391,8 @@
       "name": "auth"
     },
     {
-      "description": "Score management endpoints",
-      "name": "score"
-    },
-    {
-      "description": "Leaderboard endpoints",
+      "description": "Leaderboard and score endpoints",
       "name": "leaderboard"
-    },
-    {
-      "description": "Report endpoints",
-      "name": "report"
     }
   ],
   "x-tagGroups": [
@@ -695,9 +400,7 @@
       "name": "v1",
       "tags": [
         "auth",
-        "score",
-        "leaderboard",
-        "report"
+        "leaderboard"
       ]
     }
   ]

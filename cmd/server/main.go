@@ -19,12 +19,6 @@ import (
 	v1Leaderboard "real-time-leaderboard/internal/module/leaderboard/adapters/rest/v1"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
 	leaderboardInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/repository"
-	v1Report "real-time-leaderboard/internal/module/report/adapters/rest/v1"
-	reportApp "real-time-leaderboard/internal/module/report/application"
-	reportInfra "real-time-leaderboard/internal/module/report/infrastructure/repository"
-	v1Score "real-time-leaderboard/internal/module/score/adapters/rest/v1"
-	scoreApp "real-time-leaderboard/internal/module/score/application"
-	scoreInfra "real-time-leaderboard/internal/module/score/infrastructure/repository"
 	"real-time-leaderboard/internal/shared/database"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
@@ -68,35 +62,21 @@ func main() {
 	userRepo := authInfra.NewPostgresUserRepository(db.Pool)
 	jwtMgr := authJWT.NewManager(cfg.JWT.SecretKey, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 
-	scoreRepo := scoreInfra.NewPostgresScoreRepository(db.Pool)
-	scoreLeaderboardRepo := scoreInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
-
+	scoreRepo := leaderboardInfra.NewPostgresScoreRepository(db.Pool)
 	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
-
-	reportRedisRepo := reportInfra.NewRedisReportRepository(redisClient.GetClient())
-	reportPostgresRepo := reportInfra.NewPostgresReportRepository(db.Pool)
-	reportRepo := reportInfra.NewCompositeReportRepository(reportRedisRepo, reportPostgresRepo)
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
+	scoreUseCase := leaderboardApp.NewScoreUseCase(scoreRepo, leaderboardRepo, l)
 	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, l)
-	reportUseCase := reportApp.NewReportUseCase(reportRepo, l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
-	leaderboardHandler := v1Leaderboard.NewHandler(leaderboardUseCase, redisClient.GetClient())
-	reportHandler := v1Report.NewHandler(reportUseCase)
-
-	// Initialize score use case (no broadcaster needed - uses Redis pub/sub)
-	scoreUseCase := scoreApp.NewScoreUseCase(
-		scoreRepo,
-		scoreLeaderboardRepo,
-		l,
-	)
-	scoreHandler := v1Score.NewHandler(scoreUseCase)
+	scoreHandler := v1Leaderboard.NewScoreHandler(scoreUseCase)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, redisClient.GetClient())
 
 	// Setup router
-	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
+	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -139,9 +119,8 @@ func setupRouter(
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
-	scoreHandler *v1Score.Handler,
-	leaderboardHandler *v1Leaderboard.Handler,
-	reportHandler *v1Report.Handler,
+	scoreHandler *v1Leaderboard.ScoreHandler,
+	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) *gin.Engine {
 	// Set gin mode based on config
 	if cfg.Logger.Level == "debug" {
@@ -159,7 +138,7 @@ func setupRouter(
 	})
 
 	// Setup API router (with middleware, grouped by /api)
-	setupAPIRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler, reportHandler)
+	setupAPIRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)
 
 	// Setup docs router (without middleware, prefixed by /docs)
 	setupDocsRouter(router)
@@ -177,9 +156,8 @@ func setupAPIRouter(
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
-	scoreHandler *v1Score.Handler,
-	leaderboardHandler *v1Leaderboard.Handler,
-	reportHandler *v1Report.Handler,
+	scoreHandler *v1Leaderboard.ScoreHandler,
+	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) {
 	// Group API routes by /api prefix
 	apiGroup := router.Group("/api")
@@ -213,8 +191,7 @@ func setupAPIRouter(
 		authHandler.RegisterRoutes(v1PublicGroup)
 
 		// Public routes
-		leaderboardHandler.RegisterRoutes(v1PublicGroup)
-		reportHandler.RegisterRoutes(v1PublicGroup)
+		v1Leaderboard.RegisterRoutes(v1PublicGroup, leaderboardHandler, nil)
 	}
 
 	// Protected routes group (auth required)
@@ -222,7 +199,8 @@ func setupAPIRouter(
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
-		scoreHandler.RegisterRoutes(v1ProtectedGroup)
+		// Protected routes
+		v1Leaderboard.RegisterRoutes(v1ProtectedGroup, nil, scoreHandler)
 	}
 }
 

@@ -28,28 +28,16 @@ graph TB
         AuthInfra[Auth Infrastructure]
     end
     
-    subgraph scoreModule[Score Module - Self Contained]
-        ScoreAdapter[Score Adapters HTTP]
-        ScoreApplication[Score Application Use Cases]
-        ScoreDomain[Score Domain Entities]
-        ScoreDomainRepo[Score Repository Interface]
-        ScoreInfra[Score Infrastructure]
-    end
-    
     subgraph leaderboardModule[Leaderboard Module - Self Contained]
+        ScoreAdapter[Score Adapters HTTP]
         LeaderboardAdapter[Leaderboard Adapters HTTP]
+        ScoreApplication[Score Application Use Cases]
         LeaderboardApplication[Leaderboard Application Use Cases]
         LeaderboardDomain[Leaderboard Domain Entities]
+        ScoreDomainRepo[Score Repository Interface]
         LeaderboardDomainRepo[Leaderboard Repository Interface]
+        ScoreInfra[Score Infrastructure]
         LeaderboardInfra[Leaderboard Infrastructure]
-    end
-    
-    subgraph reportModule[Report Module - Self Contained]
-        ReportAdapter[Report Adapters HTTP]
-        ReportApplication[Report Application Use Cases]
-        ReportDomain[Report Domain Entities]
-        ReportDomainRepo[Report Repository Interface]
-        ReportInfra[Report Infrastructure]
     end
     
     subgraph shared[Shared Components]
@@ -72,7 +60,6 @@ graph TB
     Router --> AuthAdapter
     Router --> ScoreAdapter
     Router --> LeaderboardAdapter
-    Router --> ReportAdapter
     
     AuthAdapter --> AuthApplication
     AuthApplication --> AuthDomain
@@ -82,11 +69,13 @@ graph TB
     Database --> Postgres
     
     ScoreAdapter --> ScoreApplication
-    ScoreApplication --> ScoreDomain
+    ScoreApplication --> LeaderboardDomain
     ScoreApplication --> ScoreDomainRepo
     ScoreDomainRepo --> ScoreInfra
     ScoreInfra --> Database
-    ScoreInfra --> RedisClient
+    ScoreApplication --> LeaderboardDomainRepo
+    LeaderboardDomainRepo --> LeaderboardInfra
+    LeaderboardInfra --> RedisClient
     Database --> Postgres
     RedisClient --> Redis
     
@@ -97,34 +86,21 @@ graph TB
     LeaderboardInfra --> RedisClient
     RedisClient --> Redis
     
-    ReportAdapter --> ReportApplication
-    ReportApplication --> ReportDomain
-    ReportApplication --> ReportDomainRepo
-    ReportDomainRepo --> ReportInfra
-    ReportInfra --> RedisClient
-    ReportInfra --> Database
-    RedisClient --> Redis
-    Database --> Postgres
-    
     AuthAdapter --> Middleware
     ScoreAdapter --> Middleware
     LeaderboardAdapter --> Middleware
-    ReportAdapter --> Middleware
     
     AuthApplication --> Response
     ScoreApplication --> Response
     LeaderboardApplication --> Response
-    ReportApplication --> Response
     
     AuthAdapter --> Response
     ScoreAdapter --> Response
     LeaderboardAdapter --> Response
-    ReportAdapter --> Response
     
     AuthApplication --> Logger
     ScoreApplication --> Logger
     LeaderboardApplication --> Logger
-    ReportApplication --> Logger
 ```
 
 ## Data Flow Example
@@ -142,20 +118,18 @@ sequenceDiagram
     participant SSEClient
     
     Note over Client,SSEClient: Score Submission Flow
-    Client->>ScoreAdapter: POST /api/v1/scores
+    Client->>ScoreAdapter: POST /api/v1/score
     ScoreAdapter->>ScoreApplication: SubmitScoreUseCase.Execute(score)
     ScoreApplication->>ScoreInfra: SaveScore(score)
     ScoreInfra->>Postgres: INSERT INTO scores
     ScoreApplication->>Redis: ZADD leaderboard:global score userId
-    ScoreApplication->>Redis: ZADD leaderboard:{gameId} score userId
-    ScoreApplication->>Redis: PUBLISH leaderboard:updates:global "updated"
-    ScoreApplication->>Redis: PUBLISH leaderboard:updates:{gameId} "updated"
+    ScoreApplication->>Redis: PUBLISH leaderboard:updates "updated"
     ScoreApplication-->>ScoreAdapter: Score entity
-    ScoreAdapter-->>Client: 200 OK (Score entity as JSON)
+    ScoreAdapter-->>Client: 201 Created (Score entity as JSON)
     
     Note over SSEClient,Redis: Real-Time Leaderboard Updates (SSE)
-    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard/global (SSE)
-    LeaderboardAdapter->>Redis: SUBSCRIBE leaderboard:updates:global
+    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard (SSE)
+    LeaderboardAdapter->>Redis: SUBSCRIBE leaderboard:updates
     LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
     LeaderboardAdapter-->>SSEClient: data: {leaderboard JSON}\n\n (initial)
     
@@ -166,22 +140,22 @@ sequenceDiagram
 ```
 
 **Key Points**:
-- Score module updates Redis sorted sets and publishes notifications
-- Leaderboard SSE handlers subscribe to Redis pub/sub channels
+- Score submission updates Redis sorted sets and publishes notifications
+- Leaderboard SSE handlers subscribe to Redis pub/sub channel
 - No polling - updates are pushed immediately when scores change
-- No cross-module dependencies - communication via Redis (shared infrastructure)
+- Single leaderboard - no game-specific separation
 
 ### Detailed Flow
 
 1. **Score Submission**:
-   - User submits score via `POST /api/v1/scores`
+   - User submits score via `POST /api/v1/score`
    - Score is saved to PostgreSQL for historical records
-   - Score is added/updated in Redis sorted sets (`ZADD` command)
-   - Notification is published to Redis pub/sub channels (`PUBLISH` command)
+   - Highest score for user is added/updated in Redis sorted sets (`ZADD` command)
+   - Notification is published to Redis pub/sub channel (`PUBLISH leaderboard:updates`)
 
 2. **Real-Time Updates**:
-   - SSE clients connect to leaderboard endpoints (`GET /api/v1/leaderboard/global` or `/game/:game_id`)
-   - SSE handlers subscribe to corresponding Redis pub/sub channels (`SUBSCRIBE` command)
+   - SSE clients connect to leaderboard endpoint (`GET /api/v1/leaderboard`)
+   - SSE handlers subscribe to Redis pub/sub channel (`SUBSCRIBE leaderboard:updates`)
    - Initial leaderboard data is fetched from Redis and sent to client
    - When a notification is received from pub/sub:
      - Handler fetches fresh leaderboard data from Redis sorted sets (`ZREVRANGE` command)
@@ -190,7 +164,6 @@ sequenceDiagram
 3. **Benefits**:
    - **Real-time**: Updates pushed immediately when scores change (no polling delay)
    - **Efficient**: Only fetches data when there's an actual update
-   - **Decoupled**: Score and leaderboard modules communicate via Redis (shared infrastructure)
    - **Scalable**: Works across multiple server instances - all instances receive pub/sub notifications
 
 ## Architecture Principles
@@ -209,13 +182,13 @@ Each module follows Clean Architecture with four distinct layers:
 
 ### Module Independence
 
-Each module (auth, score, leaderboard, report) is self-contained with its own:
+Each module (auth, leaderboard) is self-contained with its own:
 - Domain entities and business rules
 - Use cases and application logic
 - HTTP adapters
 - Infrastructure implementations
 
-This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
+The leaderboard module combines score submission and leaderboard retrieval functionality. This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
 
 ### Shared Components
 

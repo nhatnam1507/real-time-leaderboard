@@ -1,14 +1,12 @@
 # Real-Time Leaderboard System
 
-A high-performance, modular real-time leaderboard system built with Go, following Clean Architecture principles. The system ranks users based on their scores across various games.
+A high-performance, modular real-time leaderboard system built with Go, following Clean Architecture principles. The system ranks users based on their scores.
 
 ## Features
 
 - **User Authentication**: JWT-based authentication with access and refresh tokens
-- **Score Submission**: Submit scores for different games with metadata support
-- **Real-Time Leaderboards**: Global and game-specific leaderboards with live updates via Server-Sent Events (SSE)
-- **User Rankings**: Query user rankings in any leaderboard
-- **Top Players Reports**: Generate reports with optional date range filtering
+- **Score Submission**: Submit scores with metadata support
+- **Real-Time Leaderboard**: Single leaderboard with live updates via Server-Sent Events (SSE)
 - **Redis Sorted Sets**: Efficient leaderboard storage and queries using Redis sorted sets
 - **Redis Pub/Sub**: Real-time notifications for leaderboard updates without polling
 - **Clean Architecture**: Modular, testable, and maintainable code structure
@@ -108,9 +106,11 @@ real-time-leaderboard/
 │       │   ├── application/       # Application layer
 │       │   ├── adapters/          # Adapters layer
 │       │   └── infrastructure/    # Infrastructure layer
-│       ├── score/                  # Score Module
-│       ├── leaderboard/            # Leaderboard Module
-│       └── report/                 # Report Module
+│       └── leaderboard/            # Leaderboard Module (score submission + leaderboard)
+│           ├── domain/            # Domain layer
+│           ├── application/       # Application layer
+│           ├── adapters/          # Adapters layer
+│           └── infrastructure/    # Infrastructure layer
 ├── docs/                           # Documentation
 ├── scripts/                        # Utility scripts (shell scripts)
 │   ├── init.sh                    # Initialize development environment (dev/ci modes)
