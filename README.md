@@ -5,8 +5,9 @@ A high-performance, modular real-time leaderboard system built with Go, followin
 ## Features
 
 - **User Authentication**: JWT-based authentication with access and refresh tokens
-- **Score Submission**: Submit scores with metadata support
+- **Score Update**: Update scores via PUT endpoint (upserts - creates if not exists, updates if exists)
 - **Real-Time Leaderboard**: Single leaderboard with live updates via Server-Sent Events (SSE)
+- **PostgreSQL Backup**: Stores score per user as backup/recovery mechanism for Redis
 - **Redis Sorted Sets**: Efficient leaderboard storage and queries using Redis sorted sets
 - **Redis Pub/Sub**: Real-time notifications for leaderboard updates without polling
 - **Clean Architecture**: Modular, testable, and maintainable code structure
@@ -106,7 +107,7 @@ real-time-leaderboard/
 │       │   ├── application/       # Application layer
 │       │   ├── adapters/          # Adapters layer
 │       │   └── infrastructure/    # Infrastructure layer
-│       └── leaderboard/            # Leaderboard Module (score submission + leaderboard)
+│       └── leaderboard/            # Leaderboard Module (score update + leaderboard)
 │           ├── domain/            # Domain layer
 │           ├── application/       # Application layer
 │           ├── adapters/          # Adapters layer

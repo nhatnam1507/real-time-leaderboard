@@ -1,18 +1,15 @@
 // Package domain provides domain entities for the leaderboard module.
 package domain
 
-import (
-	"encoding/json"
-	"time"
-)
+import "time"
 
 // Score represents a score entity
 type Score struct {
-	ID          string          `json:"id"`
-	UserID      string          `json:"user_id"`
-	Score       int64           `json:"score"`
-	SubmittedAt time.Time       `json:"submitted_at"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Point     int64     `json:"point"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // LeaderboardEntry represents a leaderboard entry

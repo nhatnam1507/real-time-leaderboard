@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Real-Time Leaderboard API
   version: "1.0"
-  description: Real-time leaderboard system with REST API for score submission and Server-Sent Events (SSE) for live leaderboard updates
+  description: Real-time leaderboard system with REST API for score updates and Server-Sent Events (SSE) for live leaderboard updates
   contact:
     name: API Support
     url: http://www.example.com/support
@@ -119,11 +119,14 @@ paths:
                 $ref: '#/components/schemas/Response'
 
   /score:
-    post:
+    put:
       tags:
         - leaderboard
-      summary: Submit a score
-      description: Submit a score. Requires authentication. The score will be saved and the leaderboard will be updated.
+      summary: Update score
+      description: |
+        Update the score for the authenticated user. Requires authentication.
+        The score will be upserted in PostgreSQL (backup) and updated in Redis (leaderboard).
+        If the leaderboard record doesn't exist, it will be created with the provided point.
       security:
         - BearerAuth: []
       requestBody:
@@ -133,8 +136,8 @@ paths:
             schema:
               $ref: '#/components/schemas/SubmitScoreRequest'
       responses:
-        '201':
-          description: Score submitted successfully
+        '200':
+          description: Score updated successfully
           content:
             application/json:
               schema:
@@ -147,6 +150,12 @@ paths:
                 $ref: '#/components/schemas/Response'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Leaderboard record not found (user may not be registered)
           content:
             application/json:
               schema:
@@ -242,18 +251,12 @@ components:
     SubmitScoreRequest:
       type: object
       required:
-        - score
+        - point
       properties:
-        score:
+        point:
           type: integer
           minimum: 0
           example: 1000
-        metadata:
-          type: object
-          additionalProperties: true
-          example:
-            level: 5
-            time: 120
 
     Response:
       type: object

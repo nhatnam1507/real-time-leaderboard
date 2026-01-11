@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"real-time-leaderboard/internal/module/auth/domain"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"real-time-leaderboard/internal/module/auth/domain"
 )
 
 // PostgresUserRepository implements UserRepository using PostgreSQL
@@ -28,6 +29,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 		user.ID = uuid.New().String()
 	}
 	now := time.Now()
+	// Always set created_at to current time on creation (never update it afterwards)
 	user.CreatedAt = now
 	user.UpdatedAt = now
 

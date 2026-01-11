@@ -112,6 +112,6 @@ func RegisterRoutes(router *gin.RouterGroup, leaderboardHandler *LeaderboardHand
 		router.GET("/leaderboard", leaderboardHandler.GetLeaderboard)
 	}
 	if scoreHandler != nil {
-		router.POST("/score", scoreHandler.SubmitScore)
+		router.PUT("/score", scoreHandler.SubmitScore)
 	}
 }

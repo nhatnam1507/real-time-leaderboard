@@ -79,22 +79,14 @@
       },
       "SubmitScoreRequest": {
         "properties": {
-          "metadata": {
-            "additionalProperties": true,
-            "example": {
-              "level": 5,
-              "time": 120
-            },
-            "type": "object"
-          },
-          "score": {
+          "point": {
             "example": 1000,
             "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "score"
+          "point"
         ],
         "type": "object"
       }
@@ -113,7 +105,7 @@
       "name": "API Support",
       "url": "http://www.example.com/support"
     },
-    "description": "Real-time leaderboard system with REST API for score submission and Server-Sent Events (SSE) for live leaderboard updates",
+    "description": "Real-time leaderboard system with REST API for score updates and Server-Sent Events (SSE) for live leaderboard updates",
     "license": {
       "name": "Apache 2.0",
       "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
@@ -323,8 +315,8 @@
       }
     },
     "/score": {
-      "post": {
-        "description": "Submit a score. Requires authentication. The score will be saved and the leaderboard will be updated.",
+      "put": {
+        "description": "Update the score for the authenticated user. Requires authentication.\nThe score will be upserted in PostgreSQL (backup) and updated in Redis (leaderboard).\nIf the leaderboard record doesn't exist, it will be created with the provided point.\n",
         "requestBody": {
           "content": {
             "application/json": {
@@ -336,7 +328,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -344,7 +336,7 @@
                 }
               }
             },
-            "description": "Score submitted successfully"
+            "description": "Score updated successfully"
           },
           "400": {
             "content": {
@@ -365,6 +357,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Leaderboard record not found (user may not be registered)"
           }
         },
         "security": [
@@ -372,7 +374,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Submit a score",
+        "summary": "Update score",
         "tags": [
           "leaderboard"
         ]

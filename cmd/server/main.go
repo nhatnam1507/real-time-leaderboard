@@ -62,12 +62,12 @@ func main() {
 	userRepo := authInfra.NewPostgresUserRepository(db.Pool)
 	jwtMgr := authJWT.NewManager(cfg.JWT.SecretKey, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 
-	scoreRepo := leaderboardInfra.NewPostgresScoreRepository(db.Pool)
+	backupRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
 	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
-	scoreUseCase := leaderboardApp.NewScoreUseCase(scoreRepo, leaderboardRepo, l)
+	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, l)
 	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, l)
 
 	// Initialize handlers

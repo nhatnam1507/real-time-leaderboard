@@ -22,7 +22,7 @@ func NewScoreHandler(scoreUseCase *application.ScoreUseCase) *ScoreHandler {
 	}
 }
 
-// SubmitScore handles score submission
+// SubmitScore handles score update
 func (h *ScoreHandler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
@@ -47,5 +47,5 @@ func (h *ScoreHandler) SubmitScore(c *gin.Context) {
 		return
 	}
 
-	response.Created(c, score, "Score submitted successfully")
+	response.Success(c, score, "Score updated successfully")
 }

@@ -2,13 +2,13 @@ package domain
 
 import "context"
 
-// ScoreRepository defines the interface for score data operations
-type ScoreRepository interface {
-	Create(ctx context.Context, score *Score) error
-	GetHighestByUserID(ctx context.Context, userID string) (*Score, error)
+// LeaderboardBackupRepository defines the interface for leaderboard backup operations in PostgreSQL
+// This stores only the highest score per user as a backup/recovery mechanism for Redis
+type LeaderboardBackupRepository interface {
+	UpsertScore(ctx context.Context, userID string, point int64) (*Score, error)
 }
 
-// LeaderboardRepository defines the interface for leaderboard operations
+// LeaderboardRepository defines the interface for leaderboard operations in Redis
 type LeaderboardRepository interface {
 	UpdateScore(ctx context.Context, userID string, score int64) error
 	GetTopPlayers(ctx context.Context, limit, offset int64) ([]LeaderboardEntry, error)

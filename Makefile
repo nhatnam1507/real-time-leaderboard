@@ -52,7 +52,7 @@ openapi:
 	@echo "✓ OpenAPI v1 specification (YAML and JSON) validated"
 
 ## check: Run linter, unit tests, and workflow validation locally
-check: lint ut
+check: lint ut openapi
 	@echo "Validating workflow syntax..."
 	@./scripts/validate-workflows.sh
 	@echo "All checks completed successfully"

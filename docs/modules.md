@@ -19,21 +19,22 @@ The system is organized into self-contained modules, each following Clean Archit
 
 ## Leaderboard Module
 
-**Purpose**: Score submission and real-time leaderboard queries via Server-Sent Events (SSE)
+**Purpose**: Score update and real-time leaderboard queries via Server-Sent Events (SSE)
 
 **Components**:
-- **Domain**: Score entity, LeaderboardEntry entity, ScoreRepository interface, LeaderboardRepository interface
+- **Domain**: Score entity, LeaderboardEntry entity, LeaderboardBackupRepository interface, LeaderboardRepository interface
 - **Application**: SubmitScoreUseCase, GetLeaderboardUseCase
-- **Adapters**: HTTP handlers for score submission and leaderboard retrieval (SSE)
-- **Infrastructure**: PostgreSQL ScoreRepository, Redis LeaderboardRepository (sorted sets)
+- **Adapters**: HTTP handlers for score update and leaderboard retrieval (SSE)
+- **Infrastructure**: PostgreSQL LeaderboardBackupRepository (stores score per user), Redis LeaderboardRepository (sorted sets for real-time queries)
 
 **Endpoints**:
-- `POST /api/v1/score` - Submit score (authenticated)
+- `PUT /api/v1/score` - Update score (authenticated)
 - `GET /api/v1/leaderboard` - SSE stream for leaderboard (real-time updates)
 
-**Real-Time Updates**:
-- When a score is submitted, it's stored in PostgreSQL and updated in Redis sorted sets for leaderboard ranking
-- The module publishes notifications to Redis pub/sub channel (`leaderboard:updates`) to notify leaderboard clients
-- SSE handlers subscribe to Redis pub/sub channel and fetch fresh leaderboard data when updates occur
-- No polling - updates are pushed immediately when scores change
+**Overview**:
+- Score updates use UPSERT pattern (creates if not exists, updates if exists)
+- PostgreSQL stores score per user as backup/recovery for Redis
+- Redis stores leaderboard in sorted sets for real-time queries
+- Real-time updates via Server-Sent Events (SSE) with Redis pub/sub notifications
 
+For detailed flows and data storage strategy, see [Architecture](./architecture.md) and [Redis Strategy](./redis-strategy.md).

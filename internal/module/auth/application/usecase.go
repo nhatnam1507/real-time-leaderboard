@@ -4,10 +4,11 @@ package application
 import (
 	"context"
 
-	"golang.org/x/crypto/bcrypt"
 	"real-time-leaderboard/internal/module/auth/domain"
-	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/logger"
+	"real-time-leaderboard/internal/shared/response"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // AuthUseCase handles authentication use cases

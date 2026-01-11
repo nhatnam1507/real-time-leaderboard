@@ -1,6 +1,6 @@
 # Redis Strategy
 
-The leaderboard system uses Redis for both storage and real-time notifications.
+The leaderboard system uses Redis for real-time leaderboard queries and notifications. PostgreSQL stores the score per user as a backup/recovery mechanism.
 
 ## Sorted Sets for Leaderboard Storage
 
@@ -35,13 +35,14 @@ Redis pub/sub is used to notify SSE clients when leaderboard data changes:
 - **Publisher**: Score module publishes notifications when scores are updated
 - **Subscriber**: Leaderboard SSE handlers subscribe to channels and fetch fresh data on notification
 
-### Flow
+### Data Recovery
 
-1. Score is submitted → stored in Redis sorted set
-2. Score module publishes notification to Redis pub/sub channel
-3. SSE handlers subscribed to the channel receive notification
-4. Handlers fetch fresh leaderboard data from Redis sorted sets
-5. Updated leaderboard sent to clients via Server-Sent Events (SSE)
+If Redis data is lost, the system can rebuild the leaderboard from PostgreSQL:
+- PostgreSQL stores one record per user with their current score (UPSERT pattern)
+- All users' scores can be queried and restored to Redis
+- This ensures data durability while maintaining Redis performance for real-time queries
+
+For complete system flow, see [Architecture](./architecture.md).
 
 ### Benefits
 

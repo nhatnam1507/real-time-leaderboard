@@ -34,10 +34,10 @@ graph TB
         ScoreApplication[Score Application Use Cases]
         LeaderboardApplication[Leaderboard Application Use Cases]
         LeaderboardDomain[Leaderboard Domain Entities]
-        ScoreDomainRepo[Score Repository Interface]
+        BackupDomainRepo[Leaderboard Backup Repository Interface]
         LeaderboardDomainRepo[Leaderboard Repository Interface]
-        ScoreInfra[Score Infrastructure]
-        LeaderboardInfra[Leaderboard Infrastructure]
+        BackupInfra[PostgreSQL Backup Infrastructure]
+        LeaderboardInfra[Redis Leaderboard Infrastructure]
     end
     
     subgraph shared[Shared Components]
@@ -70,9 +70,9 @@ graph TB
     
     ScoreAdapter --> ScoreApplication
     ScoreApplication --> LeaderboardDomain
-    ScoreApplication --> ScoreDomainRepo
-    ScoreDomainRepo --> ScoreInfra
-    ScoreInfra --> Database
+    ScoreApplication --> BackupDomainRepo
+    BackupDomainRepo --> BackupInfra
+    BackupInfra --> Database
     ScoreApplication --> LeaderboardDomainRepo
     LeaderboardDomainRepo --> LeaderboardInfra
     LeaderboardInfra --> RedisClient
@@ -105,7 +105,7 @@ graph TB
 
 ## Data Flow Example
 
-### Score Submission and Real-Time Leaderboard Updates
+### Score Update and Real-Time Leaderboard Updates
 
 ```mermaid
 sequenceDiagram
@@ -117,15 +117,21 @@ sequenceDiagram
     participant LeaderboardAdapter
     participant SSEClient
     
-    Note over Client,SSEClient: Score Submission Flow
-    Client->>ScoreAdapter: POST /api/v1/score
+    Note over Client,SSEClient: Score Update Flow
+    Client->>ScoreAdapter: PUT /api/v1/score
     ScoreAdapter->>ScoreApplication: SubmitScoreUseCase.Execute(score)
-    ScoreApplication->>ScoreInfra: SaveScore(score)
-    ScoreInfra->>Postgres: INSERT INTO scores
-    ScoreApplication->>Redis: ZADD leaderboard:global score userId
+    ScoreApplication->>BackupInfra: UpsertScore(userId, point)
+    BackupInfra->>Postgres: INSERT ... ON CONFLICT (upsert)
+    ScoreApplication->>Redis: ZADD leaderboard:global point userId
     ScoreApplication->>Redis: PUBLISH leaderboard:updates "updated"
     ScoreApplication-->>ScoreAdapter: Score entity
-    ScoreAdapter-->>Client: 201 Created (Score entity as JSON)
+    ScoreAdapter-->>Client: 200 OK (Score entity as JSON)
+    
+    Note over Client,SSEClient: User Registration Flow
+    Client->>AuthAdapter: POST /api/v1/auth/register
+    AuthAdapter->>AuthApplication: RegisterUseCase.Execute()
+    AuthApplication->>AuthInfra: CreateUser()
+    AuthInfra->>Postgres: INSERT INTO users
     
     Note over SSEClient,Redis: Real-Time Leaderboard Updates (SSE)
     SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard (SSE)
@@ -133,27 +139,33 @@ sequenceDiagram
     LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
     LeaderboardAdapter-->>SSEClient: data: {leaderboard JSON}\n\n (initial)
     
-    Note over Redis,SSEClient: When score is submitted...
+    Note over Redis,SSEClient: When score is updated...
     Redis-->>LeaderboardAdapter: PUBLISH notification received
     LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
     LeaderboardAdapter-->>SSEClient: data: {updated leaderboard JSON}\n\n
 ```
 
 **Key Points**:
-- Score submission updates Redis sorted sets and publishes notifications
+- Score update upserts in PostgreSQL and updates Redis sorted sets, then publishes notifications
 - Leaderboard SSE handlers subscribe to Redis pub/sub channel
 - No polling - updates are pushed immediately when scores change
 - Single leaderboard - no game-specific separation
 
 ### Detailed Flow
 
-1. **Score Submission**:
-   - User submits score via `POST /api/v1/score`
-   - Score is saved to PostgreSQL for historical records
-   - Highest score for user is added/updated in Redis sorted sets (`ZADD` command)
+1. **User Registration**:
+   - User registers via `POST /api/v1/auth/register`
+   - User record is created in PostgreSQL
+
+2. **Score Update**:
+   - User updates score via `PUT /api/v1/score`
+   - System upserts score in PostgreSQL (creates if not exists, updates if exists)
+     - PostgreSQL serves as backup/recovery mechanism for Redis
+     - Uses UPSERT pattern to handle both new and existing users automatically
+   - Score is updated in Redis sorted sets (`ZADD` command)
    - Notification is published to Redis pub/sub channel (`PUBLISH leaderboard:updates`)
 
-2. **Real-Time Updates**:
+3. **Real-Time Updates**:
    - SSE clients connect to leaderboard endpoint (`GET /api/v1/leaderboard`)
    - SSE handlers subscribe to Redis pub/sub channel (`SUBSCRIBE leaderboard:updates`)
    - Initial leaderboard data is fetched from Redis and sent to client
@@ -161,10 +173,24 @@ sequenceDiagram
      - Handler fetches fresh leaderboard data from Redis sorted sets (`ZREVRANGE` command)
      - Updated leaderboard is sent to client via SSE (`data: {json}\n\n` format)
 
-3. **Benefits**:
-   - **Real-time**: Updates pushed immediately when scores change (no polling delay)
-   - **Efficient**: Only fetches data when there's an actual update
-   - **Scalable**: Works across multiple server instances - all instances receive pub/sub notifications
+### Data Storage Strategy
+
+- **PostgreSQL**: Stores one record per user with their current score
+  - Uses UPSERT pattern - creates record if user doesn't exist, updates if exists
+  - Serves as backup/recovery mechanism if Redis data is lost
+  - Can be queried to rebuild Redis leaderboard if needed
+
+- **Redis**: Stores leaderboard in sorted sets for efficient real-time queries
+  - Primary source of truth for leaderboard rankings
+  - Provides O(log(N)) complexity for insertions and range queries
+  - See [Redis Strategy](./redis-strategy.md) for detailed implementation
+
+### Benefits
+
+- **Real-time**: Updates pushed immediately when scores change (no polling delay)
+- **Efficient**: Only fetches data when there's an actual update
+- **Scalable**: Works across multiple server instances - all instances receive pub/sub notifications
+- **Durable**: PostgreSQL backup ensures data can be recovered if Redis fails
 
 ## Architecture Principles
 
@@ -188,7 +214,7 @@ Each module (auth, leaderboard) is self-contained with its own:
 - HTTP adapters
 - Infrastructure implementations
 
-The leaderboard module combines score submission and leaderboard retrieval functionality. This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
+The leaderboard module combines score update and leaderboard retrieval functionality. This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
 
 ### Shared Components
 
