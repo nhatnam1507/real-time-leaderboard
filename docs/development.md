@@ -111,8 +111,8 @@ The project includes utility scripts in the `scripts/` directory:
   - **Can be run from any directory** - paths are resolved relative to script location
   
 - **`migrate.sh`**: Database migration tool
-  - `./scripts/migrate.sh up [version]` - Apply migrations
-  - `./scripts/migrate.sh down [version]` - Rollback migrations
+  - `./scripts/migrate.sh up [migration_dir]` - Apply migrations from specified directory
+  - `./scripts/migrate.sh down [migration_dir]` - Rollback one migration from specified directory
   - Idempotent - safe to run multiple times
   - Validates parameter count and provides helpful error messages
   - **Can be run from any directory** - paths are resolved relative to script location
@@ -200,26 +200,33 @@ Workflow syntax is validated automatically as part of `make check`.
 
 Migrations are automatically run when using `make start-dev` or `make run`. The migration tool is idempotent, meaning it's safe to run multiple times - it only applies new migrations that haven't been run yet.
 
-You can also run migrations manually using the `migrate.sh` tool:
+### Migration Structure
+
+Migrations are organized into two directories:
+- **`migrations/schema/`**: Core schema migrations for all environments (tables, indexes, etc.)
+- **`migrations/dev/`**: Development-only seed data migrations (test users, sample scores)
+
+When running `make start-dev`, both schema and dev migrations are applied. When running `make run` (production-like mode), only schema migrations are applied.
+
+### Running Migrations Manually
+
+You can run migrations manually using the `migrate.sh` tool:
 
 ```bash
-# Run all pending migrations (from project root)
-./scripts/migrate.sh up
+# Run all pending schema migrations
+./scripts/migrate.sh up migrations/schema
 
-# Or from any directory (using absolute path)
-/path/to/project/scripts/migrate.sh up
+# Run all pending dev migrations
+./scripts/migrate.sh up migrations/dev
 
-# Run migrations up to a specific version
-./scripts/migrate.sh up 2
+# Rollback one migration from schema
+./scripts/migrate.sh down migrations/schema
 
-# Rollback one migration
-./scripts/migrate.sh down
-
-# Rollback to a specific version
-./scripts/migrate.sh down 1
+# Rollback one migration from dev
+./scripts/migrate.sh down migrations/dev
 
 # Custom DB URL (if needed)
-DB_URL=postgres://user:pass@host:5432/dbname?sslmode=disable ./scripts/migrate.sh up
+DB_URL=postgres://user:pass@host:5432/dbname?sslmode=disable ./scripts/migrate.sh up migrations/schema
 ```
 
 **Note**: All scripts resolve paths relative to their location, so they can be run from any directory without path issues.
@@ -228,8 +235,20 @@ DB_URL=postgres://user:pass@host:5432/dbname?sslmode=disable ./scripts/migrate.s
 
 **Create a new migration**:
 ```bash
-migrate create -ext sql -dir internal/shared/database/migrations -seq migration_name
+# Create a new schema migration
+migrate create -ext sql -dir migrations/schema -seq migration_name
+
+# Create a new dev migration
+migrate create -ext sql -dir migrations/dev -seq migration_name
 ```
+
+### Dev Seed Data
+
+The `migrations/dev/` directory contains seed data for development:
+- **Test users**: 10 test users (alice, bob, charlie, etc.) with password `password123`
+- **Leaderboard scores**: Pre-populated scores for all test users with varying points
+
+All seed data migrations are idempotent - they can be run multiple times without creating duplicates. The seed data uses `ON CONFLICT` clauses to ensure safe re-execution.
 
 The `migrate` and `wait4x` tools are automatically installed by `make init-dev` if not already present.
 

@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Database migration tool
-# Usage: ./scripts/migrate.sh [up|down] [version]
-#   up      Apply all pending migrations (or up to version if specified)
-#   down    Rollback migrations (or down to version if specified)
-#   version Optional: specific version to migrate to
+# Usage: ./scripts/migrate.sh [up|down] [migration_dir]
+#   up           Apply all pending migrations
+#   down         Rollback all migrations
+#   migration_dir  Migration directory path (required, can be relative or absolute)
 
 set -e
 
@@ -16,7 +16,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # Configuration (paths relative to project root)
-MIGRATIONS_DIR="$PROJECT_ROOT/internal/shared/database/migrations"
 DB_URL="${DB_URL:-postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable}"
 
 # Add Go bin directory to PATH
@@ -24,17 +23,18 @@ export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [up|down] [version]"
+    echo "Usage: $0 [up|down] [migration_dir]"
     echo ""
     echo "Commands:"
-    echo "  up      Apply all pending migrations (or up to version if specified)"
-    echo "  down    Rollback migrations (or down to version if specified)"
+    echo "  up           Apply all pending migrations"
+    echo "  down         Rollback all migrations"
     echo ""
-    echo "Options:"
-    echo "  version Optional: specific version to migrate to"
+    echo "Arguments:"
+    echo "  migration_dir  Migration directory path (required)"
+    echo "                 Can be relative to project root or absolute path"
     echo ""
     echo "Environment variables:"
-    echo "  DB_URL  Database connection string (default: postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable)"
+    echo "  DB_URL       Database connection string (default: postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable)"
     exit 1
 }
 
@@ -48,34 +48,95 @@ check_migrate_tool() {
     fi
 }
 
+# Function to validate migration directory
+validate_migration_dir() {
+    local migration_dir=$1
+    
+    if [ -z "$migration_dir" ]; then
+        echo "Error: Migration directory is required"
+        show_usage
+    fi
+    
+    # Convert relative path to absolute if needed
+    if [[ "$migration_dir" != /* ]]; then
+        migration_dir="$PROJECT_ROOT/$migration_dir"
+    fi
+    
+    if [ ! -d "$migration_dir" ]; then
+        echo "Error: Migration directory does not exist: $migration_dir"
+        exit 1
+    fi
+    
+    echo "$migration_dir"
+}
+
+# Function to get migration table name from directory path
+# Schema uses default table, dev uses custom table with suffix
+get_migration_table() {
+    local migration_dir=$1
+    # Extract the last directory name (schema or dev)
+    local dir_name=$(basename "$migration_dir")
+    
+    # Schema uses default table (empty string means use default)
+    if [ "$dir_name" = "schema" ]; then
+        echo ""
+    else
+        # Other directories (like dev) use custom table with suffix
+        echo "schema_migrations_${dir_name}"
+    fi
+}
+
+# Function to add migration table parameter to database URL
+add_migration_table_to_url() {
+    local db_url=$1
+    local table_name=$2
+    
+    # If table_name is empty, use default (don't add parameter)
+    if [ -z "$table_name" ]; then
+        echo "$db_url"
+        return
+    fi
+    
+    # Check if URL already has query parameters
+    if [[ "$db_url" == *"?"* ]]; then
+        echo "${db_url}&x-migrations-table=${table_name}"
+    else
+        echo "${db_url}?x-migrations-table=${table_name}"
+    fi
+}
+
 # Function to run migration up
 migrate_up() {
-    local version=$1
+    local migration_dir=$1
     
-    echo "Applying migrations..."
-    if [ -n "$version" ]; then
-        echo "  Migrating up to version: $version"
-        migrate -path "$MIGRATIONS_DIR" -database "$DB_URL" up "$version"
+    migration_dir=$(validate_migration_dir "$migration_dir")
+    local table_name=$(get_migration_table "$migration_dir")
+    local db_url_with_table=$(add_migration_table_to_url "$DB_URL" "$table_name")
+    
+    if [ -n "$table_name" ]; then
+        echo "Applying migrations from: $migration_dir (using table: $table_name)"
     else
-        echo "  Migrating to latest version"
-        migrate -path "$MIGRATIONS_DIR" -database "$DB_URL" up
+        echo "Applying migrations from: $migration_dir (using default table)"
     fi
+    migrate -path "$migration_dir" -database "$db_url_with_table" up
     
     echo "✓ Migrations applied successfully"
 }
 
 # Function to run migration down
 migrate_down() {
-    local version=$1
+    local migration_dir=$1
     
-    echo "Rolling back migrations..."
-    if [ -n "$version" ]; then
-        echo "  Rolling back to version: $version"
-        migrate -path "$MIGRATIONS_DIR" -database "$DB_URL" down "$version"
+    migration_dir=$(validate_migration_dir "$migration_dir")
+    local table_name=$(get_migration_table "$migration_dir")
+    local db_url_with_table=$(add_migration_table_to_url "$DB_URL" "$table_name")
+    
+    if [ -n "$table_name" ]; then
+        echo "Rolling back migrations from: $migration_dir (using table: $table_name)"
     else
-        echo "  Rolling back one migration"
-        migrate -path "$MIGRATIONS_DIR" -database "$DB_URL" down 1
+        echo "Rolling back migrations from: $migration_dir (using default table)"
     fi
+    migrate -path "$migration_dir" -database "$db_url_with_table" down
     
     echo "✓ Migrations rolled back successfully"
 }
@@ -86,8 +147,11 @@ main() {
     if [ $# -eq 0 ]; then
         echo "Error: Missing command"
         show_usage
+    elif [ $# -lt 2 ]; then
+        echo "Error: Missing migration directory. Expected 2 parameters, got $#"
+        show_usage
     elif [ $# -gt 2 ]; then
-        echo "Error: Too many parameters. Expected 1-2 parameters, got $#"
+        echo "Error: Too many parameters. Expected 2 parameters, got $#"
         show_usage
     fi
     
@@ -96,15 +160,15 @@ main() {
     
     # Parse arguments
     local direction=$1
-    local version=${2:-}
+    local migration_dir=$2
     
     # Execute migration command
     case "$direction" in
         up)
-            migrate_up "$version"
+            migrate_up "$migration_dir"
             ;;
         down)
-            migrate_down "$version"
+            migrate_down "$migration_dir"
             ;;
         *)
             echo "Error: Invalid command '$direction'"

@@ -90,6 +90,9 @@ real-time-leaderboard/
 ├── cmd/
 │   └── server/
 │       └── main.go                 # Application entry point
+├── migrations/                     # Database migrations
+│   ├── schema/                     # Core schema migrations (all environments)
+│   └── dev/                        # Dev-only seed data migrations
 ├── internal/
 │   ├── config/                     # Configuration management
 │   │   └── config.go
@@ -99,7 +102,6 @@ real-time-leaderboard/
 │   │   ├── logger/                 # Logger implementation
 │   │   ├── validator/              # Request validation
 │   │   ├── database/               # Database connections
-│   │   │   └── migrations/        # Database migrations
 │   │   └── redis/                  # Redis connections
 │   └── module/                     # Self-contained modules
 │       ├── auth/                   # Auth Module

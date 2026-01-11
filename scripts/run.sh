@@ -83,8 +83,9 @@ wait_for_services() {
 
 # Function to run database migrations
 run_migrations() {
-    echo "Running database migrations..."
-    DB_URL="$DATABASE_URL" "$MIGRATION_SCRIPT" up
+    local migration_dir=$1
+    echo "Running database migrations from: $migration_dir"
+    DB_URL="$DATABASE_URL" "$MIGRATION_SCRIPT" up "$migration_dir"
 }
 
 # Cleanup function to stop dependency services
@@ -109,8 +110,11 @@ start_development_mode() {
     # Wait for services to be ready
     wait_for_services
     
-    # Run migrations
-    run_migrations
+    # Run schema migrations
+    run_migrations "migrations/schema"
+    
+    # Run dev seed migrations
+    run_migrations "migrations/dev"
     
     # Start application with air (hot reload)
     echo "Starting application with air..."
@@ -128,8 +132,8 @@ start_full_stack_mode() {
     # Wait for services to be ready
     wait_for_services
     
-    # Run migrations
-    run_migrations
+    # Run schema migrations (no dev seed in production-like mode)
+    run_migrations "migrations/schema"
     
     # Start app container
     # App container uses service names (postgres/redis) from docker network (configured in docker-compose.yml)
