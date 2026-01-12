@@ -36,22 +36,21 @@ type SubmitScoreRequest struct {
 
 // SubmitScore upserts the score for a user
 // Creates record if it doesn't exist, updates if it exists
-func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) (*domain.Score, error) {
+func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
 	// Upsert score in PostgreSQL (creates if not exists, updates if exists)
 	// This serves as backup/recovery mechanism for Redis
-	score, err := uc.backupRepo.UpsertScore(ctx, userID, req.Point)
-	if err != nil {
+	if err := uc.backupRepo.UpsertScore(ctx, userID, req.Point); err != nil {
 		uc.logger.Errorf(ctx, "Failed to upsert score: %v", err)
-		return nil, response.NewInternalError("Failed to update score", err)
+		return response.NewInternalError("Failed to update score", err)
 	}
 
 	// Update Redis leaderboard with the new score (publishes to Redis pub/sub)
 	// This is the source of truth for real-time leaderboard queries
-	if err := uc.leaderboardRepo.UpdateScore(ctx, userID, score.Point); err != nil {
+	if err := uc.leaderboardRepo.UpdateScore(ctx, userID, req.Point); err != nil {
 		uc.logger.Errorf(ctx, "Failed to update leaderboard: %v", err)
 		// Don't fail the request if leaderboard update fails - PostgreSQL backup is still updated
 	}
 
 	uc.logger.Infof(ctx, "Score updated: user=%s, point=%d", userID, req.Point)
-	return score, nil
+	return nil
 }

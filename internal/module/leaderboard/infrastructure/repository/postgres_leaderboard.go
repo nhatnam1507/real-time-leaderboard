@@ -25,7 +25,7 @@ func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) *PostgresLeaderboardRe
 // UpsertScore upserts the score for a user
 // If user doesn't exist, creates a new record with the given point
 // If user exists, updates the score
-func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID string, point int64) (*domain.Score, error) {
+func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID string, point int64) error {
 	now := time.Now()
 
 	query := `
@@ -35,52 +35,51 @@ func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID 
 		DO UPDATE SET 
 			point = $2,
 			updated_at = $4
-		RETURNING id, user_id, point, created_at, updated_at
 	`
 
-	var score domain.Score
-	err := r.pool.QueryRow(ctx, query, userID, point, now, now).Scan(
-		&score.ID,
-		&score.UserID,
-		&score.Point,
-		&score.CreatedAt,
-		&score.UpdatedAt,
-	)
-
+	_, err := r.pool.Exec(ctx, query, userID, point, now, now)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upsert score: %w", err)
+		return fmt.Errorf("failed to upsert score: %w", err)
 	}
 
-	return &score, nil
+	return nil
 }
 
-// GetAllScores retrieves all leaderboard entries from PostgreSQL
+// GetLeaderboard retrieves the full leaderboard from PostgreSQL with usernames
 // Used for syncing data to Redis when Redis is empty
-func (r *PostgresLeaderboardRepository) GetAllScores(ctx context.Context) ([]domain.Score, error) {
+func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
 	query := `
-		SELECT id, user_id, point, created_at, updated_at
-		FROM leaderboard
-		ORDER BY point DESC
+		SELECT 
+			l.user_id,
+			u.username,
+			l.point,
+			ROW_NUMBER() OVER (ORDER BY l.point DESC) as rank
+		FROM leaderboard l
+		JOIN users u ON l.user_id = u.id
+		ORDER BY l.point DESC
 	`
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get all scores: %w", err)
+		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 	defer rows.Close()
 
-	var scores []domain.Score
+	var entries []domain.LeaderboardEntry
 	for rows.Next() {
-		var score domain.Score
-		if err := rows.Scan(&score.ID, &score.UserID, &score.Point, &score.CreatedAt, &score.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan score: %w", err)
+		var entry domain.LeaderboardEntry
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Score, &entry.Rank); err != nil {
+			return nil, fmt.Errorf("failed to scan leaderboard entry: %w", err)
 		}
-		scores = append(scores, score)
+		entries = append(entries, entry)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating scores: %w", err)
+		return nil, fmt.Errorf("error iterating leaderboard entries: %w", err)
 	}
 
-	return scores, nil
+	return &domain.Leaderboard{
+		Entries: entries,
+		Total:   int64(len(entries)),
+	}, nil
 }

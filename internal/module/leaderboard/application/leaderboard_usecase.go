@@ -13,6 +13,7 @@ import (
 type LeaderboardUseCase struct {
 	leaderboardRepo domain.LeaderboardRepository
 	backupRepo      domain.LeaderboardBackupRepository
+	userRepo        domain.UserRepository
 	logger          *logger.Logger
 }
 
@@ -20,11 +21,13 @@ type LeaderboardUseCase struct {
 func NewLeaderboardUseCase(
 	leaderboardRepo domain.LeaderboardRepository,
 	backupRepo domain.LeaderboardBackupRepository,
+	userRepo domain.UserRepository,
 	l *logger.Logger,
 ) *LeaderboardUseCase {
 	return &LeaderboardUseCase{
 		leaderboardRepo: leaderboardRepo,
 		backupRepo:      backupRepo,
+		userRepo:        userRepo,
 		logger:          l,
 	}
 }
@@ -37,19 +40,19 @@ func (uc *LeaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
 		return err
 	}
 
-	scores, err := uc.backupRepo.GetAllScores(ctx)
+	leaderboard, err := uc.backupRepo.GetLeaderboard(ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, score := range scores {
-		if err := uc.leaderboardRepo.UpdateScore(ctx, score.UserID, score.Point); err != nil {
-			uc.logger.Warnf(ctx, "Failed to sync score for user %s: %v", score.UserID, err)
+	for _, entry := range leaderboard.Entries {
+		if err := uc.leaderboardRepo.UpdateScore(ctx, entry.UserID, entry.Score); err != nil {
+			uc.logger.Warnf(ctx, "Failed to sync score for user %s: %v", entry.UserID, err)
 		}
 	}
 
-	if len(scores) > 0 {
-		uc.logger.Infof(ctx, "Synced %d leaderboard entries from PostgreSQL to Redis", len(scores))
+	if len(leaderboard.Entries) > 0 {
+		uc.logger.Infof(ctx, "Synced %d leaderboard entries from PostgreSQL to Redis", len(leaderboard.Entries))
 	}
 	return nil
 }
@@ -69,8 +72,46 @@ func (uc *LeaderboardUseCase) GetFullLeaderboard(ctx context.Context) (*domain.L
 		total = int64(len(entries))
 	}
 
+	// Enrich entries with usernames
+	if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
+		uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
+		// Continue even if username enrichment fails
+	}
+
 	return &domain.Leaderboard{
 		Entries: entries,
 		Total:   total,
 	}, nil
+}
+
+// enrichEntriesWithUsernames enriches leaderboard entries with usernames
+func (uc *LeaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	// Extract user IDs
+	userIDs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		userIDs = append(userIDs, entry.UserID)
+	}
+
+	// Fetch usernames in batch
+	usernames, err := uc.userRepo.GetByIDs(ctx, userIDs)
+	if err != nil {
+		return err
+	}
+
+	// Enrich entries with usernames
+	for i := range entries {
+		if username, ok := usernames[entries[i].UserID]; ok {
+			entries[i].Username = username
+		} else {
+			// User not found - log warning and use empty string
+			uc.logger.Warnf(ctx, "Username not found for user ID: %s", entries[i].UserID)
+			entries[i].Username = ""
+		}
+	}
+
+	return nil
 }

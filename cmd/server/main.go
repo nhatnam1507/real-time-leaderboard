@@ -65,15 +65,16 @@ func main() {
 
 	backupRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
 	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
+	leaderboardUserRepo := leaderboardInfra.NewUserRepository(db.Pool)
 
 	// Initialize broadcast service (adapter layer)
-	leaderboardBroadcast := leaderboardAdapters.NewLeaderboardBroadcast(leaderboardRepo, backupRepo, redisClient.GetClient(), l)
+	leaderboardBroadcast := leaderboardAdapters.NewLeaderboardBroadcast(leaderboardRepo, backupRepo, leaderboardUserRepo, redisClient.GetClient(), l)
 	defer leaderboardBroadcast.Stop()
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
 	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, leaderboardUserRepo, l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)

@@ -18,6 +18,7 @@ import (
 type LeaderboardBroadcast struct {
 	leaderboardRepo domain.LeaderboardRepository
 	backupRepo      domain.LeaderboardBackupRepository
+	userRepo        domain.UserRepository
 	redisClient     *redis.Client
 	logger          *logger.Logger
 
@@ -34,6 +35,7 @@ type LeaderboardBroadcast struct {
 func NewLeaderboardBroadcast(
 	leaderboardRepo domain.LeaderboardRepository,
 	backupRepo domain.LeaderboardBackupRepository,
+	userRepo domain.UserRepository,
 	redisClient *redis.Client,
 	logger *logger.Logger,
 ) *LeaderboardBroadcast {
@@ -42,6 +44,7 @@ func NewLeaderboardBroadcast(
 	broadcast := &LeaderboardBroadcast{
 		leaderboardRepo: leaderboardRepo,
 		backupRepo:      backupRepo,
+		userRepo:        userRepo,
 		redisClient:     redisClient,
 		logger:          logger,
 		scoreTopic:      domain.RedisScoreUpdateTopic,
@@ -160,10 +163,48 @@ func (b *LeaderboardBroadcast) fetchFullLeaderboard(ctx context.Context) *domain
 		total = int64(len(entries))
 	}
 
+	// Enrich entries with usernames
+	if err := b.enrichEntriesWithUsernames(ctx, entries); err != nil {
+		b.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
+		// Continue even if username enrichment fails
+	}
+
 	return &domain.Leaderboard{
 		Entries: entries,
 		Total:   total,
 	}
+}
+
+// enrichEntriesWithUsernames enriches leaderboard entries with usernames
+func (b *LeaderboardBroadcast) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	// Extract user IDs
+	userIDs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		userIDs = append(userIDs, entry.UserID)
+	}
+
+	// Fetch usernames in batch
+	usernames, err := b.userRepo.GetByIDs(ctx, userIDs)
+	if err != nil {
+		return err
+	}
+
+	// Enrich entries with usernames
+	for i := range entries {
+		if username, ok := usernames[entries[i].UserID]; ok {
+			entries[i].Username = username
+		} else {
+			// User not found - log warning and use empty string
+			b.logger.Warnf(ctx, "Username not found for user ID: %s", entries[i].UserID)
+			entries[i].Username = ""
+		}
+	}
+
+	return nil
 }
 
 // Stop stops the broadcast service

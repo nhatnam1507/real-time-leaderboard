@@ -41,11 +41,10 @@ func (h *ScoreHandler) SubmitScore(c *gin.Context) {
 		return
 	}
 
-	score, err := h.scoreUseCase.SubmitScore(c.Request.Context(), userID, req)
-	if err != nil {
+	if err := h.scoreUseCase.SubmitScore(c.Request.Context(), userID, req); err != nil {
 		response.Error(c, err)
 		return
 	}
 
-	response.Success(c, score, "Score updated successfully")
+	response.Success(c, gin.H{"user_id": userID, "point": req.Point}, "Score updated successfully")
 }
