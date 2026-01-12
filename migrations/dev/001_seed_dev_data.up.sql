@@ -21,7 +21,7 @@ ON CONFLICT (username) DO NOTHING;
 
 -- Seed leaderboard scores
 -- Scores are varied to test leaderboard ranking
-INSERT INTO leaderboard (id, user_id, point, created_at, updated_at)
+INSERT INTO leaderboard (id, user_id, score, created_at, updated_at)
 VALUES 
     ('00000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001', 10000, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000002', 8500, NOW(), NOW()),
@@ -34,5 +34,5 @@ VALUES
     ('00000000-0000-0000-0000-000000000109', '00000000-0000-0000-0000-000000000009', 1500, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000110', '00000000-0000-0000-0000-000000000010', 1000, NOW(), NOW())
 ON CONFLICT (user_id) DO UPDATE SET 
-    point = EXCLUDED.point,
+    score = EXCLUDED.score,
     updated_at = EXCLUDED.updated_at;

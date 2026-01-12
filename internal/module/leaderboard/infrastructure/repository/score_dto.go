@@ -8,7 +8,7 @@ import "time"
 type Score struct {
 	ID        string    `db:"id"`
 	UserID    string    `db:"user_id"`
-	Point     int64     `db:"point"`
+	Score     int64     `db:"score"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }

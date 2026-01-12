@@ -54,7 +54,11 @@ func NewLeaderboardBroadcast(
 	}
 
 	// Start in background
-	go broadcast.Start(ctx)
+	go func() {
+		if err := broadcast.Start(ctx); err != nil {
+			broadcast.logger.Errorf(ctx, "Broadcast service error: %v", err)
+		}
+	}()
 
 	return broadcast
 }
@@ -62,7 +66,9 @@ func NewLeaderboardBroadcast(
 // Start listens to score updates and broadcasts
 func (b *LeaderboardBroadcast) Start(ctx context.Context) error {
 	pubsub := b.redisClient.Subscribe(ctx, b.scoreTopic)
-	defer pubsub.Close()
+	defer func() {
+		_ = pubsub.Close()
+	}()
 
 	// Generate unique instance ID for lock
 	instanceID := b.getInstanceID()
@@ -117,7 +123,9 @@ func (b *LeaderboardBroadcast) RegisterClient(ctx context.Context) <-chan *domai
 
 	go func() {
 		defer close(ch)
-		defer pubsub.Close()
+		defer func() {
+			_ = pubsub.Close()
+		}()
 
 		for {
 			select {

@@ -12,6 +12,52 @@
         },
         "type": "object"
       },
+      "Leaderboard": {
+        "properties": {
+          "entries": {
+            "description": "List of leaderboard entries, sorted by rank",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Number of entries returned (equals the limit parameter when limit is applied, or the actual number of players if limit exceeds available entries)",
+            "example": 50,
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LeaderboardEntry": {
+        "properties": {
+          "rank": {
+            "description": "User's rank in the leaderboard (1-indexed)",
+            "example": 1,
+            "format": "int64",
+            "type": "integer"
+          },
+          "score": {
+            "description": "User's score",
+            "example": 1500,
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "description": "User identifier",
+            "example": "00000000-0000-0000-0000-000000000001",
+            "format": "uuid",
+            "type": "string"
+          },
+          "username": {
+            "description": "User's username",
+            "example": "alice",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "password": {
@@ -79,14 +125,14 @@
       },
       "SubmitScoreRequest": {
         "properties": {
-          "point": {
+          "score": {
             "example": 1000,
             "minimum": 0,
             "type": "integer"
           }
         },
         "required": [
-          "point"
+          "score"
         ],
         "type": "object"
       }
@@ -257,55 +303,9 @@
         ]
       }
     },
-    "/leaderboard": {
-      "get": {
-        "description": "Server-Sent Events (SSE) stream for real-time leaderboard updates.\nReturns `text/event-stream` content type. Clients receive initial leaderboard data\nand automatic updates when scores change. Updates are pushed via Redis pub/sub\nnotifications - no polling required.\n\n**Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL\non the first request, ensuring seed data and existing scores are available.\n\n**Pagination**: The `limit` parameter controls how many top players to return (default: 100, max: 100).\nThe leaderboard always shows top N players starting from rank 1 (no offset support for SSE).\n",
-        "parameters": [
-          {
-            "description": "Number of top players to return (always starts from rank 1)",
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "default": 100,
-              "example": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "example": "data: {\"entries\":[...],\"total\":100}\n\n",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "SSE stream with leaderboard data. Content-Type: text/event-stream.\nInitial leaderboard sent immediately, followed by updates when scores change.\n"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Get leaderboard (SSE stream)",
-        "tags": [
-          "leaderboard"
-        ]
-      }
-    },
-    "/score": {
+    "/leaderboard/score": {
       "put": {
-        "description": "Update the score for the authenticated user. Requires authentication.\nThe score will be upserted in PostgreSQL (backup) and updated in Redis (leaderboard).\nIf the leaderboard record doesn't exist, it will be created with the provided point.\n",
+        "description": "Update the score for the authenticated user. Requires authentication.\nUses UPSERT pattern - automatically creates the record if it doesn't exist, or updates if it exists.\nThe score will be saved in PostgreSQL (backup) and updated in Redis (leaderboard).\nReturns the user ID and updated score.\n",
         "requestBody": {
           "content": {
             "application/json": {
@@ -321,7 +321,30 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Response"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "properties": {
+                            "score": {
+                              "example": 1500,
+                              "type": "integer"
+                            },
+                            "user_id": {
+                              "example": "00000000-0000-0000-0000-000000000001",
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             },
@@ -346,16 +369,6 @@
               }
             },
             "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "Leaderboard record not found (user may not be registered)"
           }
         },
         "security": [
@@ -364,6 +377,52 @@
           }
         ],
         "summary": "Update score",
+        "tags": [
+          "leaderboard"
+        ]
+      }
+    },
+    "/leaderboard/stream": {
+      "get": {
+        "description": "Server-Sent Events (SSE) stream for real-time leaderboard updates.\nReturns `text/event-stream` content type. Clients receive initial leaderboard data\nand automatic updates when scores change. Updates are pushed via Redis pub/sub\nnotifications - no polling required.\n\n**Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL\non the first request, ensuring seed data and existing scores are available.\n\n**Pagination**: The `limit` parameter controls how many top players to return (default: 100, max: 100).\nThe leaderboard always shows top N players starting from rank 1 (no offset support for SSE).\n",
+        "parameters": [
+          {
+            "description": "Number of top players to return (always starts from rank 1)",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 100,
+              "example": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "example": "data: {\"success\":true,\"data\":{\"entries\":[{\"user_id\":\"00000000-0000-0000-0000-000000000001\",\"username\":\"alice\",\"score\":1500,\"rank\":1},{\"user_id\":\"00000000-0000-0000-0000-000000000002\",\"username\":\"bob\",\"score\":1400,\"rank\":2}],\"total\":2},\"message\":\"Leaderboard retrieved successfully\"}\n\ndata: {\"success\":true,\"data\":{\"entries\":[{\"user_id\":\"00000000-0000-0000-0000-000000000001\",\"username\":\"alice\",\"score\":1600,\"rank\":1},{\"user_id\":\"00000000-0000-0000-0000-000000000002\",\"username\":\"bob\",\"score\":1400,\"rank\":2}],\"total\":2},\"message\":\"Leaderboard updated\"}\n",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "SSE stream with leaderboard data. Content-Type: text/event-stream.\nInitial leaderboard sent immediately, followed by updates when scores change.\nEach SSE message contains a JSON object with the standard response format.\n"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get leaderboard (SSE stream)",
         "tags": [
           "leaderboard"
         ]

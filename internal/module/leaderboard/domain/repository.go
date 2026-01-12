@@ -12,7 +12,7 @@ type UserRepository interface {
 // LeaderboardBackupRepository defines the interface for leaderboard backup operations in PostgreSQL
 // This stores only the highest score per user as a backup/recovery mechanism for Redis
 type LeaderboardBackupRepository interface {
-	UpsertScore(ctx context.Context, userID string, point int64) error
+	UpsertScore(ctx context.Context, userID string, score int64) error
 	GetLeaderboard(ctx context.Context) (*Leaderboard, error)
 }
 

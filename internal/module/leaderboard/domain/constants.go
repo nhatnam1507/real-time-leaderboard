@@ -2,11 +2,13 @@
 package domain
 
 const (
-	// Redis pub/sub topics
-	RedisScoreUpdateTopic  = "leaderboard:score:updates"  // Published when score updates
-	RedisViewerUpdateTopic = "leaderboard:viewer:updates" // Published with full leaderboard data
+	// RedisScoreUpdateTopic is the Redis pub/sub topic published when score updates occur.
+	RedisScoreUpdateTopic = "leaderboard:score:updates"
+	// RedisViewerUpdateTopic is the Redis pub/sub topic published with full leaderboard data for viewers.
+	RedisViewerUpdateTopic = "leaderboard:viewer:updates"
 
-	// Redis keys
-	RedisLeaderboardKey  = "leaderboard:global"         // Redis sorted set key
-	RedisBroadcastLockKey = "leaderboard:broadcast:lock" // Distributed lock key
+	// RedisLeaderboardKey is the Redis sorted set key for the global leaderboard.
+	RedisLeaderboardKey = "leaderboard:global"
+	// RedisBroadcastLockKey is the Redis key used for distributed locking in broadcast service.
+	RedisBroadcastLockKey = "leaderboard:broadcast:lock"
 )

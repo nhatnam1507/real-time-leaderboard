@@ -10,7 +10,9 @@ import (
 	"real-time-leaderboard/internal/module/leaderboard/adapters"
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/shared/middleware"
 	"real-time-leaderboard/internal/shared/response"
+	"real-time-leaderboard/internal/shared/validator"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,16 +24,22 @@ const (
 	defaultLeaderboardLimit = 100
 )
 
-// LeaderboardHandler handles HTTP requests for leaderboards
+// LeaderboardHandler handles HTTP requests for leaderboards and scores
 type LeaderboardHandler struct {
 	leaderboardUseCase *application.LeaderboardUseCase
+	scoreUseCase       *application.ScoreUseCase
 	broadcast          *adapters.LeaderboardBroadcast
 }
 
 // NewLeaderboardHandler creates a new leaderboard HTTP handler
-func NewLeaderboardHandler(leaderboardUseCase *application.LeaderboardUseCase, broadcast *adapters.LeaderboardBroadcast) *LeaderboardHandler {
+func NewLeaderboardHandler(
+	leaderboardUseCase *application.LeaderboardUseCase,
+	scoreUseCase *application.ScoreUseCase,
+	broadcast *adapters.LeaderboardBroadcast,
+) *LeaderboardHandler {
 	return &LeaderboardHandler{
 		leaderboardUseCase: leaderboardUseCase,
+		scoreUseCase:       scoreUseCase,
 		broadcast:          broadcast,
 	}
 }
@@ -136,16 +144,33 @@ func extractLimit(leaderboard *domain.Leaderboard, limit int) *domain.Leaderboar
 
 	return &domain.Leaderboard{
 		Entries: leaderboard.Entries[:limit],
-		Total:   leaderboard.Total,
+		Total:   int64(limit),
 	}
 }
 
-// RegisterRoutes registers leaderboard and score routes
-func RegisterRoutes(router *gin.RouterGroup, leaderboardHandler *LeaderboardHandler, scoreHandler *ScoreHandler) {
-	if leaderboardHandler != nil {
-		router.GET("/leaderboard", leaderboardHandler.GetLeaderboard)
+// SubmitScore handles score update
+func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
+		return
 	}
-	if scoreHandler != nil {
-		router.PUT("/score", scoreHandler.SubmitScore)
+
+	var req application.SubmitScoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, validator.Validate(req))
+		return
 	}
+
+	if err := validator.Validate(req); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if err := h.scoreUseCase.SubmitScore(c.Request.Context(), userID, req); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"user_id": userID, "score": req.Score}, "Score updated successfully")
 }

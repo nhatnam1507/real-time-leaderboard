@@ -118,15 +118,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Response'
 
-  /score:
+  /leaderboard/score:
     put:
       tags:
         - leaderboard
       summary: Update score
       description: |
         Update the score for the authenticated user. Requires authentication.
-        The score will be upserted in PostgreSQL (backup) and updated in Redis (leaderboard).
-        If the leaderboard record doesn't exist, it will be created with the provided point.
+        Uses UPSERT pattern - automatically creates the record if it doesn't exist, or updates if it exists.
+        The score will be saved in PostgreSQL (backup) and updated in Redis (leaderboard).
+        Returns the user ID and updated score.
       security:
         - BearerAuth: []
       requestBody:
@@ -141,7 +142,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Response'
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user_id:
+                            type: string
+                            format: uuid
+                            example: "00000000-0000-0000-0000-000000000001"
+                          score:
+                            type: integer
+                            example: 1500
         '400':
           description: Invalid request
           content:
@@ -154,14 +168,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Response'
-        '404':
-          description: Leaderboard record not found (user may not be registered)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Response'
 
-  /leaderboard:
+  /leaderboard/stream:
     get:
       tags:
         - leaderboard
@@ -192,11 +200,15 @@ paths:
           description: |
             SSE stream with leaderboard data. Content-Type: text/event-stream.
             Initial leaderboard sent immediately, followed by updates when scores change.
+            Each SSE message contains a JSON object with the standard response format.
           content:
             text/event-stream:
               schema:
                 type: string
-                example: "data: {\"entries\":[...],\"total\":100}\n\n"
+                example: |
+                  data: {"success":true,"data":{"entries":[{"user_id":"00000000-0000-0000-0000-000000000001","username":"alice","score":1500,"rank":1},{"user_id":"00000000-0000-0000-0000-000000000002","username":"bob","score":1400,"rank":2}],"total":2},"message":"Leaderboard retrieved successfully"}
+                  
+                  data: {"success":true,"data":{"entries":[{"user_id":"00000000-0000-0000-0000-000000000001","username":"alice","score":1600,"rank":1},{"user_id":"00000000-0000-0000-0000-000000000002","username":"bob","score":1400,"rank":2}],"total":2},"message":"Leaderboard updated"}
         '500':
           description: Internal server error
           content:
@@ -249,9 +261,9 @@ components:
     SubmitScoreRequest:
       type: object
       required:
-        - point
+        - score
       properties:
-        point:
+        score:
           type: integer
           minimum: 0
           example: 1000
@@ -279,4 +291,40 @@ components:
           type: string
         message:
           type: string
+    LeaderboardEntry:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User identifier
+          example: "00000000-0000-0000-0000-000000000001"
+        username:
+          type: string
+          description: User's username
+          example: "alice"
+        score:
+          type: integer
+          format: int64
+          description: User's score
+          example: 1500
+        rank:
+          type: integer
+          format: int64
+          description: User's rank in the leaderboard (1-indexed)
+          example: 1
+
+    Leaderboard:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+          description: List of leaderboard entries, sorted by rank
+        total:
+          type: integer
+          format: int64
+          description: Number of entries returned (equals the limit parameter when limit is applied, or the actual number of players if limit exceeds available entries)
+          example: 50
 

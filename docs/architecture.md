@@ -1,247 +1,297 @@
 # Architecture
 
-The system follows **Clean Architecture** principles with clear layer separation:
+This document describes the architectural principles, project structure, and coding conventions used in this project.
 
-- **Domain Layer**: Core entities and repository interfaces (no dependencies)
-- **Application Layer**: Use cases and business logic orchestration
-- **Adapters Layer**: HTTP handlers (input adapters)
-- **Infrastructure Layer**: Repository implementations, external services (output adapters)
+## Clean Architecture Principles
 
-## System Architecture Diagram
+The system follows **Clean Architecture** principles to achieve maintainability, testability, and independence of business logic from frameworks and infrastructure.
 
-```mermaid
-graph TB
-    subgraph client[Client Applications]
-        WebClient[Web Client]
-        MobileClient[Mobile Client]
-    end
-    
-    subgraph api[API Gateway Layer]
-        Router[HTTP Router]
-    end
-    
-    subgraph authModule[Auth Module - Self Contained]
-        AuthAdapter[Auth Adapters HTTP]
-        AuthApplication[Auth Application Use Cases]
-        AuthDomain[Auth Domain Entities]
-        AuthDomainRepo[Auth Repository Interface]
-        AuthInfra[Auth Infrastructure]
-    end
-    
-    subgraph leaderboardModule[Leaderboard Module - Self Contained]
-        ScoreAdapter[Score Adapters HTTP]
-        LeaderboardAdapter[Leaderboard Adapters HTTP]
-        ScoreApplication[Score Application Use Cases]
-        LeaderboardApplication[Leaderboard Application Use Cases]
-        LeaderboardDomain[Leaderboard Domain Entities]
-        BackupDomainRepo[Leaderboard Backup Repository Interface]
-        LeaderboardDomainRepo[Leaderboard Repository Interface]
-        BackupInfra[PostgreSQL Backup Infrastructure]
-        LeaderboardInfra[Redis Leaderboard Infrastructure]
-    end
-    
-    subgraph shared[Shared Components]
-        Response[Response Helpers & Errors]
-        Middleware[Middleware]
-        Logger[Logger]
-        Validator[Validator]
-        Database[Database Connection]
-        Redis[Redis Connection]
-    end
-    
-    subgraph infra[External Services]
-        Postgres[(PostgreSQL)]
-        Redis[(Redis)]
-    end
-    
-    WebClient --> Router
-    MobileClient --> Router
-    
-    Router --> AuthAdapter
-    Router --> ScoreAdapter
-    Router --> LeaderboardAdapter
-    
-    AuthAdapter --> AuthApplication
-    AuthApplication --> AuthDomain
-    AuthApplication --> AuthDomainRepo
-    AuthDomainRepo --> AuthInfra
-    AuthInfra --> Database
-    Database --> Postgres
-    
-    ScoreAdapter --> ScoreApplication
-    ScoreApplication --> LeaderboardDomain
-    ScoreApplication --> BackupDomainRepo
-    BackupDomainRepo --> BackupInfra
-    BackupInfra --> Database
-    ScoreApplication --> LeaderboardDomainRepo
-    LeaderboardDomainRepo --> LeaderboardInfra
-    LeaderboardInfra --> RedisClient
-    Database --> Postgres
-    RedisClient --> Redis
-    
-    LeaderboardAdapter --> LeaderboardApplication
-    LeaderboardApplication --> LeaderboardDomain
-    LeaderboardApplication --> LeaderboardDomainRepo
-    LeaderboardDomainRepo --> LeaderboardInfra
-    LeaderboardInfra --> RedisClient
-    RedisClient --> Redis
-    
-    AuthAdapter --> Middleware
-    ScoreAdapter --> Middleware
-    LeaderboardAdapter --> Middleware
-    
-    AuthApplication --> Response
-    ScoreApplication --> Response
-    LeaderboardApplication --> Response
-    
-    AuthAdapter --> Response
-    ScoreAdapter --> Response
-    LeaderboardAdapter --> Response
-    
-    AuthApplication --> Logger
-    ScoreApplication --> Logger
-    LeaderboardApplication --> Logger
+### Core Principles
+
+1. **Dependency Rule**: Source code dependencies point inward. The domain layer has no dependencies on other layers.
+2. **Independence**: Business logic is independent of frameworks, databases, and external services.
+3. **Testability**: Business logic can be tested without external dependencies.
+4. **Framework Independence**: Business logic doesn't depend on web frameworks, databases, or UI frameworks.
+
+### Layer Structure
+
+The architecture consists of four concentric layers:
+
+```
+┌─────────────────────────────────────┐
+│      Adapters Layer (Input)         │  ← HTTP handlers, external interfaces
+├─────────────────────────────────────┤
+│      Application Layer              │  ← Use cases, business logic orchestration
+├─────────────────────────────────────┤
+│      Domain Layer                   │  ← Entities, repository interfaces (no deps)
+├─────────────────────────────────────┤
+│      Infrastructure Layer (Output)  │  ← Repository implementations, external services
+└─────────────────────────────────────┘
 ```
 
-## Data Flow Example
+**Dependency Direction**: Adapters → Application → Domain ← Infrastructure
 
-### Score Update and Real-Time Leaderboard Updates
+### Layer Responsibilities
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant ScoreAdapter
-    participant ScoreApplication
-    participant ScoreInfra
-    participant Redis
-    participant LeaderboardAdapter
-    participant SSEClient
-    
-    Note over Client,SSEClient: Score Update Flow
-    Client->>ScoreAdapter: PUT /api/v1/score
-    ScoreAdapter->>ScoreApplication: SubmitScoreUseCase.Execute(score)
-    ScoreApplication->>BackupInfra: UpsertScore(userId, point)
-    BackupInfra->>Postgres: INSERT ... ON CONFLICT (upsert)
-    ScoreApplication->>Redis: ZADD leaderboard:global point userId
-    ScoreApplication->>Redis: PUBLISH leaderboard:updates "updated"
-    ScoreApplication-->>ScoreAdapter: Score entity
-    ScoreAdapter-->>Client: 200 OK (Score entity as JSON)
-    
-    Note over Client,SSEClient: User Registration Flow
-    Client->>AuthAdapter: POST /api/v1/auth/register
-    AuthAdapter->>AuthApplication: RegisterUseCase.Execute()
-    AuthApplication->>AuthInfra: CreateUser()
-    AuthInfra->>Postgres: INSERT INTO users
-    
-    Note over SSEClient,Redis: Real-Time Leaderboard Updates (SSE)
-    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard?limit=50 (SSE)
-    LeaderboardAdapter->>LeaderboardApplication: SyncFromPostgres(ctx)
-    LeaderboardApplication->>Redis: ZCARD leaderboard:global
-    alt Redis is empty
-        LeaderboardApplication->>BackupInfra: GetAllScores()
-        BackupInfra->>Postgres: SELECT * FROM leaderboard
-        BackupInfra-->>LeaderboardApplication: scores[]
-        loop For each score
-            LeaderboardApplication->>Redis: ZADD leaderboard:global
-        end
-    end
-    LeaderboardAdapter->>LeaderboardApplication: WatchLeaderboard(ctx, listReq)
-    LeaderboardApplication->>Redis: ZREVRANGE leaderboard:global 0 49
-    LeaderboardApplication-->>LeaderboardAdapter: channel <- Leaderboard (initial)
-    LeaderboardAdapter-->>SSEClient: data: {leaderboard JSON}\n\n (initial)
-    LeaderboardApplication->>Redis: SUBSCRIBE leaderboard:updates
-    
-    Note over Redis,SSEClient: When score is updated...
-    Redis-->>LeaderboardApplication: PUBLISH notification received
-    LeaderboardApplication->>Redis: ZREVRANGE leaderboard:global 0 49
-    LeaderboardApplication-->>LeaderboardAdapter: channel <- Leaderboard (updated)
-    LeaderboardAdapter-->>SSEClient: data: {updated leaderboard JSON}\n\n
+#### Domain Layer (`domain/`)
+- **Purpose**: Contains pure business logic and rules
+- **Contains**: 
+  - Domain entities (business concepts only, no infrastructure concerns)
+  - Repository interfaces (what the domain needs, not how it's implemented)
+  - Domain constants (e.g., Redis keys, topics)
+- **Rules**:
+  - **Zero external dependencies** - no imports from other layers
+  - No database IDs, timestamps, or infrastructure concerns
+  - Repository interfaces return domain objects, not DTOs
+  - Pure Go code - no framework dependencies
+
+#### Application Layer (`application/`)
+- **Purpose**: Orchestrates business logic and use cases
+- **Contains**:
+  - Use case structs and methods
+  - Business logic orchestration
+  - Data enrichment (combining data from multiple sources)
+- **Rules**:
+  - Depends only on domain layer
+  - No direct infrastructure access - uses domain interfaces
+  - Contains business logic, not infrastructure details
+  - Can call multiple repositories to compose results
+
+#### Adapters Layer (`adapters/`)
+- **Purpose**: Translates external requests into domain operations
+- **Contains**:
+  - HTTP handlers (REST API)
+  - Request/response transformation
+  - Connection lifecycle management (e.g., SSE)
+- **Rules**:
+  - No business logic - delegates to application layer
+  - Handles protocol-specific concerns (HTTP, SSE, WebSocket)
+  - Transforms external formats to domain entities
+  - Manages connection lifecycle only
+
+#### Infrastructure Layer (`infrastructure/`)
+- **Purpose**: Implements technical details and external integrations
+- **Contains**:
+  - Repository implementations (PostgreSQL, Redis)
+  - DTOs (Data Transfer Objects) for database operations
+  - External service clients
+- **Rules**:
+  - Implements domain repository interfaces
+  - Uses DTOs internally (with `db` tags, not `json` tags)
+  - Maps DTOs to domain objects when returning
+  - Database concerns (IDs, timestamps) stay here
+
+### Dependency Rules
+
+1. **Domain Independence**: Domain layer has zero dependencies on other layers
+2. **Interface Segregation**: Repository interfaces are defined in domain, implemented in infrastructure
+3. **Dependency Inversion**: High-level modules (application) depend on abstractions (domain interfaces), not concrete implementations
+4. **Module Independence**: Each module owns its interfaces - no cross-module dependencies
+
+## Project Structure
+
+The project is organized following Clean Architecture principles. See [README.md](../README.md) for the complete directory structure.
+
+### Module Organization
+
+Each module is self-contained and follows a consistent structure:
+
+```
+module/
+├── domain/          # Business entities and repository interfaces
+├── application/     # Use cases and business logic orchestration
+├── adapters/        # HTTP handlers and external interface adapters
+└── infrastructure/  # Repository implementations and external services
 ```
 
 **Key Points**:
-- Score update upserts in PostgreSQL and updates Redis sorted sets, then publishes notifications
-- Leaderboard SSE handlers subscribe to Redis pub/sub channel
-- No polling - updates are pushed immediately when scores change
-- Single leaderboard - no game-specific separation
-
-### Detailed Flow
-
-1. **User Registration**:
-   - User registers via `POST /api/v1/auth/register`
-   - User record is created in PostgreSQL
-
-2. **Score Update**:
-   - User updates score via `PUT /api/v1/score`
-   - System upserts score in PostgreSQL (creates if not exists, updates if exists)
-     - PostgreSQL serves as backup/recovery mechanism for Redis
-     - Uses UPSERT pattern to handle both new and existing users automatically
-   - Score is updated in Redis sorted sets (`ZADD` command)
-   - Notification is published to Redis pub/sub channel (`PUBLISH leaderboard:updates`)
-
-3. **Real-Time Updates**:
-   - SSE clients connect to leaderboard endpoint (`GET /api/v1/leaderboard?limit=50`)
-   - Handler calls `SyncFromPostgres()` for lazy loading - syncs PostgreSQL data to Redis if Redis is empty
-   - Handler calls `WatchLeaderboard()` which:
-     - Fetches initial leaderboard from Redis and sends to channel
-     - Subscribes to Redis pub/sub channel (`SUBSCRIBE leaderboard:updates`) in application layer
-     - On each pub/sub notification, fetches fresh leaderboard and sends to channel
-   - Handler reads from channel and streams to client via SSE (`data: {json}\n\n` format)
-   - Handler only manages SSE connection lifecycle - all business logic is in application layer
-
-### Data Storage Strategy
-
-- **PostgreSQL**: Stores one record per user with their current score
-  - Uses UPSERT pattern - creates record if user doesn't exist, updates if exists
-  - Serves as backup/recovery mechanism if Redis data is lost
-  - Can be queried to rebuild Redis leaderboard if needed
-  - **Lazy Loading**: On first leaderboard request, if Redis is empty, data is automatically synced from PostgreSQL
-
-- **Redis**: Stores leaderboard in sorted sets for efficient real-time queries
-  - Primary source of truth for leaderboard rankings
-  - Provides O(log(N)) complexity for insertions and range queries
-  - Automatically populated from PostgreSQL on first request if empty (lazy loading)
-  - See [Redis Strategy](./redis-strategy.md) for detailed implementation
-
-### Benefits
-
-- **Real-time**: Updates pushed immediately when scores change (no polling delay)
-- **Efficient**: Only fetches data when there's an actual update
-- **Scalable**: Works across multiple server instances - all instances receive pub/sub notifications
-- **Durable**: PostgreSQL backup ensures data can be recovered if Redis fails
-
-## Architecture Principles
-
-### Clean Architecture Layers
-
-Each module follows Clean Architecture with four distinct layers:
-
-1. **Domain Layer** (`domain/`): Contains core business entities and repository interfaces. This layer has no external dependencies and represents the business rules.
-
-2. **Application Layer** (`application/`): Contains use cases that orchestrate business logic. It depends only on the domain layer and defines interfaces for infrastructure.
-
-3. **Adapters Layer** (`adapters/`): Contains HTTP handlers that translate external requests into domain entities and use cases. This is the input adapter layer.
-
-4. **Infrastructure Layer** (`infrastructure/`): Contains implementations of repositories and external service integrations (database, Redis, etc.). This is the output adapter layer.
-
-### Module Independence
-
-Each module (auth, leaderboard) is self-contained with its own:
-- Domain entities and business rules
-- Use cases and application logic
-- HTTP adapters
-- Infrastructure implementations
-
-The leaderboard module combines score update and leaderboard retrieval functionality. This design allows each module to be extracted into a separate microservice if needed. See [Microservice Migration Guide](./microservice-migration.md) for details.
+- Each module is independent - no cross-module imports
+- Layers depend inward: Adapters → Application → Domain ← Infrastructure
+- Domain layer has zero external dependencies
+- Infrastructure implements domain interfaces
 
 ### Shared Components
 
-The `internal/shared/` directory contains cross-cutting concerns used by all modules:
+The `internal/shared/` directory provides cross-cutting concerns:
 - **Response**: Standardized API responses and error handling
-- **Middleware**: HTTP middleware (authentication, logging, recovery)
-- **Logger**: Centralized logging
+- **Middleware**: HTTP middleware (auth, logging, recovery, CORS)
+- **Logger**: Centralized structured logging
 - **Validator**: Request validation utilities
 - **Database**: PostgreSQL connection and migrations
 - **Redis**: Redis client connection
 
-These shared components follow the dependency inversion principle - modules depend on abstractions, not concrete implementations.
+These follow dependency inversion - modules depend on abstractions, not concrete implementations.
 
+## Coding Conventions
+
+### Naming Conventions
+
+- **Packages**: Lowercase, single word, descriptive (e.g., `domain`, `application`, `repository`)
+- **Interfaces**: Descriptive names ending with the role (e.g., `UserRepository`, `LeaderboardRepository`)
+- **Structs**: PascalCase (e.g., `LeaderboardEntry`, `ScoreUseCase`)
+- **Functions**: PascalCase for exported, camelCase for unexported
+- **Constants**: PascalCase with descriptive names (e.g., `RedisLeaderboardKey`)
+
+### File Organization
+
+- **Domain entities**: One file per entity or related entities (e.g., `leaderboard.go`)
+- **Repository interfaces**: Grouped in `repository.go` or split by concern
+- **Use cases**: One file per use case or related use cases
+- **Handlers**: One file per handler or version group
+- **Repository implementations**: One file per repository implementation
+
+### Domain Layer Rules
+
+1. **No Infrastructure Concerns**:
+   ```go
+   // ❌ Bad - contains database ID and timestamps
+   type Score struct {
+       ID        string    `json:"id"`
+       CreatedAt time.Time  `json:"created_at"`
+   }
+   
+   // ✅ Good - pure business concept
+   type LeaderboardEntry struct {
+       UserID   string `json:"user_id"`
+       Username string `json:"username"`
+       Score    int64  `json:"score"`
+       Rank     int64  `json:"rank"`
+   }
+   ```
+
+2. **Repository Interfaces Return Domain Objects**:
+   ```go
+   // ✅ Good - returns domain object
+   type LeaderboardRepository interface {
+       GetTopPlayers(ctx context.Context, limit, offset int64) ([]LeaderboardEntry, error)
+   }
+   
+   // ❌ Bad - returns DTO
+   type LeaderboardRepository interface {
+       GetTopPlayers(ctx context.Context, limit, offset int64) ([]ScoreDTO, error)
+   }
+   ```
+
+3. **Constants in Domain**:
+   ```go
+   // ✅ Good - domain constants
+   const (
+       RedisLeaderboardKey = "leaderboard:global"
+       RedisScoreUpdateTopic = "leaderboard:score:updates"
+   )
+   ```
+
+### Infrastructure Layer Rules
+
+1. **Use DTOs with Database Tags**:
+   ```go
+   // ✅ Good - DTO with db tags
+   type Score struct {
+       ID        string    `db:"id"`
+       UserID    string    `db:"user_id"`
+       Point     int64     `db:"point"`
+       CreatedAt time.Time `db:"created_at"`
+   }
+   ```
+
+2. **Map DTOs to Domain Objects**:
+   ```go
+   // ✅ Good - maps DTO to domain
+   func (r *PostgresRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
+       // Query with DTO
+       var dto ScoreDTO
+       // ... scan into dto
+       
+       // Map to domain
+       return &domain.Leaderboard{
+           Entries: mapToDomain(dto),
+       }, nil
+   }
+   ```
+
+3. **Keep DTOs Private**:
+   ```go
+   // ✅ Good - DTO is internal to infrastructure
+   type score struct {  // lowercase = unexported
+       ID string `db:"id"`
+   }
+   ```
+
+### Application Layer Rules
+
+1. **Enrich Domain Objects**:
+   ```go
+   // ✅ Good - enriches domain objects with data from multiple sources
+   func (uc *UseCase) GetFullLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
+       entries, _ := uc.leaderboardRepo.GetTopPlayers(ctx, 1000, 0)
+       usernames, _ := uc.userRepo.GetByIDs(ctx, extractUserIDs(entries))
+       enrichEntries(entries, usernames)
+       return &domain.Leaderboard{Entries: entries}, nil
+   }
+   ```
+
+2. **Orchestrate, Don't Implement**:
+   ```go
+   // ✅ Good - orchestrates business logic
+   func (uc *UseCase) SubmitScore(ctx context.Context, userID string, point int64) error {
+       if err := uc.backupRepo.UpsertScore(ctx, userID, point); err != nil {
+           return err
+       }
+       return uc.leaderboardRepo.UpdateScore(ctx, userID, point)
+   }
+   ```
+
+### Adapters Layer Rules
+
+1. **Delegate to Application Layer**:
+   ```go
+   // ✅ Good - delegates to use case
+   func (h *Handler) SubmitScore(c *gin.Context) {
+       if err := h.useCase.SubmitScore(ctx, userID, req); err != nil {
+           response.Error(c, err)
+           return
+       }
+       response.Success(c, data, "Success")
+   }
+   ```
+
+2. **Handle Protocol Concerns Only**:
+   ```go
+   // ✅ Good - handles SSE connection lifecycle
+   func (h *Handler) GetLeaderboard(c *gin.Context) {
+       c.Header("Content-Type", "text/event-stream")
+       updateCh := h.broadcast.RegisterClient(ctx)
+       // ... manage connection
+   }
+   ```
+
+### Error Handling
+
+- Use domain-specific errors in application layer
+- Use shared error helpers from `internal/shared/response`
+- Log errors with context in application layer
+- Return errors, don't panic (except in unrecoverable situations)
+
+### Dependency Injection
+
+- All dependencies injected via constructors
+- Interfaces defined in domain, implementations in infrastructure
+- Wire dependencies in `cmd/server/main.go`
+- Enables easy testing with mocks
+
+## Module Independence
+
+Each module is self-contained:
+
+- **Own Domain**: Defines its own entities and repository interfaces
+- **No Cross-Module Dependencies**: Modules don't import from other modules
+- **Own Interfaces**: If a module needs user data, it defines its own `UserRepository` interface
+- **Extractable**: Each module can be extracted to a separate microservice
+
+This design ensures:
+- Modules can evolve independently
+- Easy to extract to microservices
+- Clear boundaries and responsibilities
+- Testable in isolation
+
+For module-specific details, see [Modules](./modules.md).

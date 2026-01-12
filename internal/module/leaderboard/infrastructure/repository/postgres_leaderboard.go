@@ -23,21 +23,21 @@ func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) *PostgresLeaderboardRe
 }
 
 // UpsertScore upserts the score for a user
-// If user doesn't exist, creates a new record with the given point
+// If user doesn't exist, creates a new record with the given score
 // If user exists, updates the score
-func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID string, point int64) error {
+func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID string, score int64) error {
 	now := time.Now()
 
 	query := `
-		INSERT INTO leaderboard (id, user_id, point, created_at, updated_at)
+		INSERT INTO leaderboard (id, user_id, score, created_at, updated_at)
 		VALUES (uuid_generate_v4(), $1, $2, $3, $4)
 		ON CONFLICT (user_id) 
 		DO UPDATE SET 
-			point = $2,
+			score = $2,
 			updated_at = $4
 	`
 
-	_, err := r.pool.Exec(ctx, query, userID, point, now, now)
+	_, err := r.pool.Exec(ctx, query, userID, score, now, now)
 	if err != nil {
 		return fmt.Errorf("failed to upsert score: %w", err)
 	}
@@ -52,11 +52,11 @@ func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) (*do
 		SELECT 
 			l.user_id,
 			u.username,
-			l.point,
-			ROW_NUMBER() OVER (ORDER BY l.point DESC) as rank
+			l.score,
+			ROW_NUMBER() OVER (ORDER BY l.score DESC) as rank
 		FROM leaderboard l
 		JOIN users u ON l.user_id = u.id
-		ORDER BY l.point DESC
+		ORDER BY l.score DESC
 	`
 
 	rows, err := r.pool.Query(ctx, query)

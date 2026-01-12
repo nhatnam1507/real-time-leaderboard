@@ -151,7 +151,8 @@ real-time-leaderboard/
 
 For detailed documentation, see the [docs](./docs/) folder:
 
-- **[Architecture](./docs/architecture.md)** - System architecture, diagrams, and architectural principles
+- **[Application Features & Flows](./docs/application.md)** - Application features, user flows, and API usage
+- **[Architecture](./docs/architecture.md)** - Clean architecture principles, project structure, and coding conventions
 - **[Modules](./docs/modules.md)** - Detailed module documentation
 - **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
 - **[Microservice Migration](./docs/microservice-migration.md)** - Guide for extracting modules to microservices

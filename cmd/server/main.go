@@ -78,11 +78,10 @@ func main() {
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
-	scoreHandler := v1Leaderboard.NewScoreHandler(scoreUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, leaderboardBroadcast)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase, leaderboardBroadcast)
 
 	// Setup router
-	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)
+	router := setupRouter(cfg, l, authUseCase, authHandler, leaderboardHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -125,7 +124,6 @@ func setupRouter(
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
-	scoreHandler *v1Leaderboard.ScoreHandler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) *gin.Engine {
 	// Set gin mode based on config
@@ -144,7 +142,7 @@ func setupRouter(
 	})
 
 	// Setup API router (with middleware, grouped by /api)
-	setupAPIRouter(router, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)
+	setupAPIRouter(router, l, authUseCase, authHandler, leaderboardHandler)
 
 	// Setup docs router (without middleware, prefixed by /docs)
 	setupDocsRouter(router)
@@ -162,7 +160,6 @@ func setupAPIRouter(
 	l *logger.Logger,
 	authUseCase *authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
-	scoreHandler *v1Leaderboard.ScoreHandler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) {
 	// Group API routes by /api prefix
@@ -196,8 +193,11 @@ func setupAPIRouter(
 		// Auth routes (no auth required)
 		authHandler.RegisterRoutes(v1PublicGroup)
 
-		// Public routes
-		v1Leaderboard.RegisterRoutes(v1PublicGroup, leaderboardHandler, nil)
+		// Public routes (leaderboard stream - no auth required)
+		if leaderboardHandler != nil {
+			leaderboardGroup := v1PublicGroup.Group("/leaderboard")
+			leaderboardGroup.GET("/stream", leaderboardHandler.GetLeaderboard)
+		}
 	}
 
 	// Protected routes group (auth required)
@@ -205,8 +205,11 @@ func setupAPIRouter(
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
-		// Protected routes
-		v1Leaderboard.RegisterRoutes(v1ProtectedGroup, nil, scoreHandler)
+		// Protected routes (leaderboard score - auth required)
+		if leaderboardHandler != nil {
+			leaderboardGroup := v1ProtectedGroup.Group("/leaderboard")
+			leaderboardGroup.PUT("/score", leaderboardHandler.SubmitScore)
+		}
 	}
 }
 

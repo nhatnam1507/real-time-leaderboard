@@ -6,17 +6,14 @@ The leaderboard system uses Redis for real-time leaderboard queries and notifica
 
 Redis sorted sets provide efficient leaderboard ranking:
 
-- **Key Pattern**: `leaderboard:{game_id}` for per-game leaderboards
-- **Key Pattern**: `leaderboard:global` for global leaderboard
+- **Key**: `leaderboard:global` (single global leaderboard)
 - **Score**: User's total score (as Redis score)
 - **Member**: User ID
 
 ### Commands Used
 
 - `ZADD` - Update/add user score
-- `ZREVRANGE` - Get top N players
-- `ZREVRANK` - Get user's rank
-- `ZSCORE` - Get user's score
+- `ZREVRANGE` - Get top N players (with scores)
 - `ZCARD` - Get total players
 
 ### Performance Considerations
@@ -28,14 +25,33 @@ Redis sorted sets provide efficient leaderboard ranking:
 
 ## Pub/Sub for Real-Time Notifications
 
-Redis pub/sub is used to notify SSE clients when leaderboard data changes:
+Redis pub/sub enables real-time leaderboard updates:
 
-- **Channel Pattern**: `leaderboard:updates:{game_id}` for game-specific updates
-- **Channel Pattern**: `leaderboard:updates:global` for global leaderboard updates
-- **Publisher**: Score module publishes notifications when scores are updated
-- **Subscriber**: Leaderboard SSE handlers subscribe to channels and fetch fresh data on notification
+- **Score Update Topic**: `leaderboard:score:updates`
+  - Published when scores are updated
+  - Broadcast service subscribes to this topic
 
-### Data Recovery and Lazy Loading
+- **Viewer Update Topic**: `leaderboard:viewer:updates`
+  - Published by broadcast service with full leaderboard JSON
+  - SSE clients subscribe to this topic
+
+### Broadcast Service
+
+The `LeaderboardBroadcast` service handles real-time updates:
+
+1. **Subscribes** to `leaderboard:score:updates` topic
+2. **Acquires distributed lock** (`leaderboard:broadcast:lock`) to prevent duplicate processing in multi-instance deployments
+3. **Fetches full leaderboard** from Redis
+4. **Enriches entries** with usernames via batch fetch from PostgreSQL
+5. **Publishes** full leaderboard to `leaderboard:viewer:updates` topic
+6. **SSE clients** receive updates automatically
+
+**Benefits**:
+- Single processing: Only one instance processes each score update
+- Efficient: Fetches leaderboard once, broadcasts to all clients
+- Scalable: Works across multiple server instances
+
+## Data Recovery and Lazy Loading
 
 The system implements **lazy loading** to automatically sync PostgreSQL data to Redis:
 
@@ -47,14 +63,22 @@ The system implements **lazy loading** to automatically sync PostgreSQL data to 
 **Manual Recovery**:
 If Redis data is lost, the system can rebuild the leaderboard from PostgreSQL:
 - PostgreSQL stores one record per user with their current score (UPSERT pattern)
-- All users' scores can be queried and restored to Redis via `GetAllScores()`
-- This ensures data durability while maintaining Redis performance for real-time queries
+- `GetLeaderboard()` retrieves all scores with usernames via JOIN
+- All users' scores can be restored to Redis via `ZADD` operations
+
+## Username Enrichment
+
+Leaderboard entries include usernames:
+
+- **PostgreSQL**: `GetLeaderboard()` joins with `users` table to include usernames directly
+- **Redis**: Entries fetched from Redis are enriched with usernames via batch fetch:
+  - Application layer extracts user IDs from entries
+  - Batch fetches usernames using `UserRepository.GetByIDs()`
+  - Enriches entries before returning to clients
+
+This design ensures:
+- PostgreSQL queries are efficient (single JOIN query)
+- Redis queries remain fast (no JOIN needed)
+- Username enrichment happens in application layer (clean separation)
 
 For complete system flow, see [Architecture](./architecture.md).
-
-### Benefits
-
-- **Real-time**: Updates pushed immediately when scores change (no polling)
-- **Efficient**: Only fetches data when there's an actual update
-- **Decoupled**: Score and leaderboard modules communicate via Redis (shared infrastructure)
-- **Scalable**: Works across multiple server instances
