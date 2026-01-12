@@ -13,88 +13,73 @@ The system follows **Clean Architecture** principles to achieve maintainability,
 3. **Testability**: Business logic can be tested without external dependencies.
 4. **Framework Independence**: Business logic doesn't depend on web frameworks, databases, or UI frameworks.
 
-### Layer Structure
-
-The architecture consists of four concentric layers:
-
-```
-┌─────────────────────────────────────┐
-│      Adapters Layer (Input)         │  ← HTTP handlers, external interfaces
-├─────────────────────────────────────┤
-│      Application Layer              │  ← Use cases, business logic orchestration
-├─────────────────────────────────────┤
-│      Domain Layer                   │  ← Entities, repository interfaces (no deps)
-├─────────────────────────────────────┤
-│      Infrastructure Layer (Output)  │  ← Repository implementations, external services
-└─────────────────────────────────────┘
-```
-
-**Dependency Direction**: Adapters → Application → Domain ← Infrastructure
-
-### Layer Responsibilities
-
-#### Domain Layer (`domain/`)
-- **Purpose**: Contains pure business logic and rules
-- **Contains**: 
-  - Domain entities (business concepts only, no infrastructure concerns)
-  - Repository interfaces (what the domain needs, not how it's implemented)
-  - Domain constants (e.g., Redis keys, topics)
-- **Rules**:
-  - **Zero external dependencies** - no imports from other layers
-  - No database IDs, timestamps, or infrastructure concerns
-  - Repository interfaces return domain objects, not DTOs
-  - Pure Go code - no framework dependencies
-
-#### Application Layer (`application/`)
-- **Purpose**: Orchestrates business logic and use cases
-- **Contains**:
-  - Use case structs and methods
-  - Business logic orchestration
-  - Data enrichment (combining data from multiple sources)
-- **Rules**:
-  - Depends only on domain layer
-  - No direct infrastructure access - uses domain interfaces
-  - Contains business logic, not infrastructure details
-  - Can call multiple repositories to compose results
-
-#### Adapters Layer (`adapters/`)
-- **Purpose**: Translates external requests into domain operations
-- **Contains**:
-  - HTTP handlers (REST API)
-  - Request/response transformation
-  - Connection lifecycle management (e.g., SSE)
-- **Rules**:
-  - No business logic - delegates to application layer
-  - Handles protocol-specific concerns (HTTP, SSE, WebSocket)
-  - Transforms external formats to domain entities
-  - Manages connection lifecycle only
-
-#### Infrastructure Layer (`infrastructure/`)
-- **Purpose**: Implements technical details and external integrations
-- **Contains**:
-  - Repository implementations (PostgreSQL, Redis)
-  - DTOs (Data Transfer Objects) for database operations
-  - External service clients
-- **Rules**:
-  - Implements domain repository interfaces
-  - Uses DTOs internally (with `db` tags, not `json` tags)
-  - Maps DTOs to domain objects when returning
-  - Database concerns (IDs, timestamps) stay here
-
-### Dependency Rules
-
-1. **Domain Independence**: Domain layer has zero dependencies on other layers
-2. **Interface Segregation**: Repository interfaces are defined in domain, implemented in infrastructure
-3. **Dependency Inversion**: High-level modules (application) depend on abstractions (domain interfaces), not concrete implementations
-4. **Module Independence**: Each module owns its interfaces - no cross-module dependencies
-
 ## Project Structure
 
-The project is organized following Clean Architecture principles. See [README.md](../README.md) for the complete directory structure.
+The project is organized following Clean Architecture principles with a modular structure:
 
-### Module Organization
+```
+real-time-leaderboard/
+├── cmd/
+│   └── server/
+│       └── main.go                 # Application entry point
+├── migrations/                     # Database migrations
+│   ├── schema/                     # Core schema migrations (all environments)
+│   └── dev/                        # Dev-only seed data migrations
+├── internal/
+│   ├── config/                     # Configuration management
+│   │   └── config.go
+│   ├── shared/                     # Shared utilities and infrastructure
+│   │   ├── response/               # API response helpers and error definitions
+│   │   ├── middleware/             # HTTP middleware
+│   │   ├── logger/                 # Logger implementation
+│   │   ├── validator/              # Request validation
+│   │   ├── database/               # Database connections
+│   │   └── redis/                  # Redis connections
+│   └── module/                     # Self-contained modules
+│       ├── auth/                   # Auth Module
+│       │   ├── domain/            # Domain layer
+│       │   ├── application/       # Application layer
+│       │   ├── adapters/          # Adapters layer
+│       │   └── infrastructure/    # Infrastructure layer
+│       └── leaderboard/            # Leaderboard Module (score update + leaderboard)
+│           ├── domain/            # Domain layer
+│           ├── application/       # Application layer
+│           ├── adapters/          # Adapters layer
+│           └── infrastructure/    # Infrastructure layer
+├── docs/                           # Documentation
+├── scripts/                        # Utility scripts (shell scripts)
+│   ├── init.sh                    # Initialize development environment (dev/ci modes)
+│   ├── run.sh                     # Application startup script (dev/all modes)
+│   ├── migrate.sh                 # Database migration tool
+│   └── validate-workflows.sh      # GitHub Actions workflow validation
+├── tools/                          # Build tools (Go tools)
+│   └── generate-openapi-json.go   # OpenAPI YAML to JSON converter
+├── .githooks/                     # Git hooks (version controlled)
+│   └── pre-push                   # Pre-push hook for code quality checks
+├── .github/
+│   ├── workflows/                 # GitHub Actions workflows
+│   │   ├── pr.yml                 # PR workflow (lint + unit tests)
+│   │   └── ci.yml                 # CI workflow (lint + unit tests + dockerize)
+│   └── actions/                   # Reusable GitHub Actions
+│       └── init/                  # Init action (Go setup + make init-ci)
+├── docker/
+│   ├── Dockerfile                 # Production Docker image
+│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
+│   └── docker-compose.yml         # Full compose file (includes deps + app)
+├── api/                           # OpenAPI 3.0 specifications
+│   ├── v1/                        # API v1 specification
+│   │   └── openapi.yaml           # OpenAPI 3.0 YAML specification
+│   └── swagger-ui.html            # Swagger UI for viewing OpenAPI docs
+├── .air.toml                      # Air configuration for hot reload
+├── .golangci.yml                  # golangci-lint configuration
+├── go.mod
+├── Makefile                       # Development commands
+└── README.md
+```
 
-Each module is self-contained and follows a consistent structure:
+## Module Organization
+
+Each module is self-contained and follows a consistent structure with four layers:
 
 ```
 module/
@@ -110,7 +95,92 @@ module/
 - Domain layer has zero external dependencies
 - Infrastructure implements domain interfaces
 
-### Shared Components
+## Layer Structure & Responsibilities
+
+The architecture consists of four concentric layers, each with specific responsibilities:
+
+```
+┌─────────────────────────────────────┐
+│      Adapters Layer (Input)         │  ← HTTP handlers, external interfaces
+├─────────────────────────────────────┤
+│      Application Layer              │  ← Use cases, business logic orchestration
+├─────────────────────────────────────┤
+│      Domain Layer                   │  ← Entities, repository interfaces (no deps)
+├─────────────────────────────────────┤
+│      Infrastructure Layer (Output)  │  ← Repository implementations, external services
+└─────────────────────────────────────┘
+```
+
+**Dependency Direction**: Adapters → Application → Domain ← Infrastructure
+
+### Domain Layer (`domain/`)
+
+**Purpose**: Contains pure business logic and rules
+
+**Contains**: 
+- Domain entities (business concepts only, no infrastructure concerns)
+- Repository interfaces (what the domain needs, not how it's implemented)
+- Domain constants (e.g., Redis keys, topics)
+
+**Rules**:
+- **Zero external dependencies** - no imports from other layers
+- No database IDs, timestamps, or infrastructure concerns
+- Repository interfaces return domain objects, not DTOs
+- Pure Go code - no framework dependencies
+
+### Application Layer (`application/`)
+
+**Purpose**: Orchestrates business logic and use cases
+
+**Contains**:
+- Use case structs and methods
+- Business logic orchestration
+- Data enrichment (combining data from multiple sources)
+
+**Rules**:
+- Depends only on domain layer
+- No direct infrastructure access - uses domain interfaces
+- Contains business logic, not infrastructure details
+- Can call multiple repositories to compose results
+
+### Adapters Layer (`adapters/`)
+
+**Purpose**: Translates external requests into domain operations
+
+**Contains**:
+- HTTP handlers (REST API)
+- Request/response transformation
+- Connection lifecycle management (e.g., SSE)
+
+**Rules**:
+- No business logic - delegates to application layer
+- Handles protocol-specific concerns (HTTP, SSE, WebSocket)
+- Transforms external formats to domain entities
+- Manages connection lifecycle only
+
+### Infrastructure Layer (`infrastructure/`)
+
+**Purpose**: Implements technical details and external integrations
+
+**Contains**:
+- Repository implementations (PostgreSQL, Redis)
+- DTOs (Data Transfer Objects) for database operations
+- External service clients
+
+**Rules**:
+- Implements domain repository interfaces
+- Uses DTOs internally (with `db` tags, not `json` tags)
+- Maps DTOs to domain objects when returning
+- Database concerns (IDs, timestamps) stay here
+
+## Dependency Rules
+
+1. **Domain Independence**: Domain layer has zero dependencies on other layers
+2. **Interface Segregation**: Repository interfaces are defined in domain, implemented in infrastructure
+3. **Dependency Inversion**: High-level modules (application) depend on abstractions (domain interfaces), not concrete implementations
+4. **Module Independence**: Each module owns its interfaces - no cross-module dependencies
+
+## Shared Components
 
 The `internal/shared/` directory provides cross-cutting concerns:
 - **Response**: Standardized API responses and error handling

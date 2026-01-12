@@ -4,6 +4,19 @@ This document describes the application features and user flows from a high-leve
 
 ## Features
 
+The Real-Time Leaderboard System provides the following features:
+
+- **User Authentication**: JWT-based authentication with access and refresh tokens
+- **Score Update**: Update scores via PUT endpoint (upserts - creates if not exists, updates if exists)
+- **Real-Time Leaderboard**: Single leaderboard with live updates via Server-Sent Events (SSE)
+- **Lazy Loading**: Automatic sync from PostgreSQL to Redis when Redis is empty (handles restarts gracefully)
+- **PostgreSQL Backup**: Stores score per user as backup/recovery mechanism for Redis
+- **Redis Sorted Sets**: Efficient leaderboard storage and queries using Redis sorted sets
+- **Redis Pub/Sub**: Real-time notifications for leaderboard updates without polling
+- **Pagination Support**: Configurable limit for leaderboard results (default: 100, max: 100)
+- **Clean Architecture**: Modular, testable, and maintainable code structure with clear separation of concerns
+- **Microservice Ready**: Each module is self-contained and can be extracted to a microservice
+
 ### User Authentication
 
 Users can register, login, and manage their authentication sessions using JWT tokens.

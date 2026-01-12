@@ -2,19 +2,6 @@
 
 A high-performance, modular real-time leaderboard system built with Go, following Clean Architecture principles. The system ranks users based on their scores.
 
-## Features
-
-- **User Authentication**: JWT-based authentication with access and refresh tokens
-- **Score Update**: Update scores via PUT endpoint (upserts - creates if not exists, updates if exists)
-- **Real-Time Leaderboard**: Single leaderboard with live updates via Server-Sent Events (SSE)
-- **Lazy Loading**: Automatic sync from PostgreSQL to Redis when Redis is empty (handles restarts gracefully)
-- **PostgreSQL Backup**: Stores score per user as backup/recovery mechanism for Redis
-- **Redis Sorted Sets**: Efficient leaderboard storage and queries using Redis sorted sets
-- **Redis Pub/Sub**: Real-time notifications for leaderboard updates without polling
-- **Pagination Support**: Configurable limit for leaderboard results (default: 100, max: 100)
-- **Clean Architecture**: Modular, testable, and maintainable code structure with clear separation of concerns
-- **Microservice Ready**: Each module is self-contained and can be extracted to a microservice
-
 ## Prerequisites
 
 - Go 1.25.5
@@ -84,68 +71,6 @@ This will:
 - Start the application in a container
 
 The server will start on `http://localhost:8080`
-
-## Project Structure
-
-```
-real-time-leaderboard/
-├── cmd/
-│   └── server/
-│       └── main.go                 # Application entry point
-├── migrations/                     # Database migrations
-│   ├── schema/                     # Core schema migrations (all environments)
-│   └── dev/                        # Dev-only seed data migrations
-├── internal/
-│   ├── config/                     # Configuration management
-│   │   └── config.go
-│   ├── shared/                     # Shared utilities and infrastructure
-│   │   ├── response/               # API response helpers and error definitions
-│   │   ├── middleware/             # HTTP middleware
-│   │   ├── logger/                 # Logger implementation
-│   │   ├── validator/              # Request validation
-│   │   ├── database/               # Database connections
-│   │   └── redis/                  # Redis connections
-│   └── module/                     # Self-contained modules
-│       ├── auth/                   # Auth Module
-│       │   ├── domain/            # Domain layer
-│       │   ├── application/       # Application layer
-│       │   ├── adapters/          # Adapters layer
-│       │   └── infrastructure/    # Infrastructure layer
-│       └── leaderboard/            # Leaderboard Module (score update + leaderboard)
-│           ├── domain/            # Domain layer
-│           ├── application/       # Application layer
-│           ├── adapters/          # Adapters layer
-│           └── infrastructure/    # Infrastructure layer
-├── docs/                           # Documentation
-├── scripts/                        # Utility scripts (shell scripts)
-│   ├── init.sh                    # Initialize development environment (dev/ci modes)
-│   ├── run.sh                     # Application startup script (dev/all modes)
-│   ├── migrate.sh                 # Database migration tool
-│   └── validate-workflows.sh      # GitHub Actions workflow validation
-├── tools/                          # Build tools (Go tools)
-│   └── generate-openapi-json.go   # OpenAPI YAML to JSON converter
-├── .githooks/                     # Git hooks (version controlled)
-│   └── pre-push                   # Pre-push hook for code quality checks
-├── .github/
-│   ├── workflows/                 # GitHub Actions workflows
-│   │   ├── pr.yml                 # PR workflow (lint + unit tests)
-│   │   └── ci.yml                 # CI workflow (lint + unit tests + dockerize)
-│   └── actions/                   # Reusable GitHub Actions
-│       └── init/                  # Init action (Go setup + make init-ci)
-├── docker/
-│   ├── Dockerfile                 # Production Docker image
-│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
-│   └── docker-compose.yml         # Full compose file (includes deps + app)
-├── api/                           # OpenAPI 3.0 specifications
-│   ├── v1/                        # API v1 specification
-│   │   └── openapi.yaml           # OpenAPI 3.0 YAML specification
-│   └── swagger-ui.html            # Swagger UI for viewing OpenAPI docs
-├── .air.toml                      # Air configuration for hot reload
-├── .golangci.yml                  # golangci-lint configuration
-├── go.mod
-├── Makefile                       # Development commands
-└── README.md
-```
 
 ## Documentation
 
