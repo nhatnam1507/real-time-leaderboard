@@ -53,3 +53,34 @@ func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID 
 
 	return &score, nil
 }
+
+// GetAllScores retrieves all leaderboard entries from PostgreSQL
+// Used for syncing data to Redis when Redis is empty
+func (r *PostgresLeaderboardRepository) GetAllScores(ctx context.Context) ([]domain.Score, error) {
+	query := `
+		SELECT id, user_id, point, created_at, updated_at
+		FROM leaderboard
+		ORDER BY point DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all scores: %w", err)
+	}
+	defer rows.Close()
+
+	var scores []domain.Score
+	for rows.Next() {
+		var score domain.Score
+		if err := rows.Scan(&score.ID, &score.UserID, &score.Point, &score.CreatedAt, &score.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan score: %w", err)
+		}
+		scores = append(scores, score)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating scores: %w", err)
+	}
+
+	return scores, nil
+}

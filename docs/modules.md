@@ -23,18 +23,21 @@ The system is organized into self-contained modules, each following Clean Archit
 
 **Components**:
 - **Domain**: Score entity, LeaderboardEntry entity, LeaderboardBackupRepository interface, LeaderboardRepository interface
-- **Application**: SubmitScoreUseCase, GetLeaderboardUseCase
-- **Adapters**: HTTP handlers for score update and leaderboard retrieval (SSE)
-- **Infrastructure**: PostgreSQL LeaderboardBackupRepository (stores score per user), Redis LeaderboardRepository (sorted sets for real-time queries)
+- **Application**: SubmitScoreUseCase, SyncFromPostgresUseCase (lazy loading), WatchLeaderboardUseCase (handles Redis pub/sub)
+- **Adapters**: HTTP handlers for score update and leaderboard retrieval (SSE) - handlers only manage connection lifecycle
+- **Infrastructure**: PostgreSQL LeaderboardBackupRepository (stores score per user, supports GetAllScores for syncing), Redis LeaderboardRepository (sorted sets for real-time queries)
 
 **Endpoints**:
 - `PUT /api/v1/score` - Update score (authenticated)
-- `GET /api/v1/leaderboard` - SSE stream for leaderboard (real-time updates)
+- `GET /api/v1/leaderboard?limit=50` - SSE stream for leaderboard (real-time updates, supports pagination)
 
 **Overview**:
 - Score updates use UPSERT pattern (creates if not exists, updates if exists)
 - PostgreSQL stores score per user as backup/recovery for Redis
+- **Lazy Loading**: Automatic sync from PostgreSQL to Redis when Redis is empty (handles restarts gracefully)
 - Redis stores leaderboard in sorted sets for real-time queries
 - Real-time updates via Server-Sent Events (SSE) with Redis pub/sub notifications
+- Business logic (pub/sub handling, syncing) is in application layer; handlers only manage SSE connection
+- Pagination support: `limit` parameter (default: 100, max: 100), always shows top N players
 
 For detailed flows and data storage strategy, see [Architecture](./architecture.md) and [Redis Strategy](./redis-strategy.md).

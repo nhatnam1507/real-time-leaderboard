@@ -35,11 +35,19 @@ Redis pub/sub is used to notify SSE clients when leaderboard data changes:
 - **Publisher**: Score module publishes notifications when scores are updated
 - **Subscriber**: Leaderboard SSE handlers subscribe to channels and fetch fresh data on notification
 
-### Data Recovery
+### Data Recovery and Lazy Loading
 
+The system implements **lazy loading** to automatically sync PostgreSQL data to Redis:
+
+- **Automatic Sync**: On first leaderboard request, if Redis is empty, the system automatically syncs all scores from PostgreSQL to Redis
+- **Non-blocking**: Sync happens on-demand, not on startup, ensuring fast application startup
+- **Resilient**: Handles Redis restarts gracefully - data is automatically restored on next request
+- **Efficient**: Only syncs when needed (Redis is empty), avoiding unnecessary work
+
+**Manual Recovery**:
 If Redis data is lost, the system can rebuild the leaderboard from PostgreSQL:
 - PostgreSQL stores one record per user with their current score (UPSERT pattern)
-- All users' scores can be queried and restored to Redis
+- All users' scores can be queried and restored to Redis via `GetAllScores()`
 - This ensures data durability while maintaining Redis performance for real-time queries
 
 For complete system flow, see [Architecture](./architecture.md).

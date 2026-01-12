@@ -134,14 +134,27 @@ sequenceDiagram
     AuthInfra->>Postgres: INSERT INTO users
     
     Note over SSEClient,Redis: Real-Time Leaderboard Updates (SSE)
-    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard (SSE)
-    LeaderboardAdapter->>Redis: SUBSCRIBE leaderboard:updates
-    LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
+    SSEClient->>LeaderboardAdapter: GET /api/v1/leaderboard?limit=50 (SSE)
+    LeaderboardAdapter->>LeaderboardApplication: SyncFromPostgres(ctx)
+    LeaderboardApplication->>Redis: ZCARD leaderboard:global
+    alt Redis is empty
+        LeaderboardApplication->>BackupInfra: GetAllScores()
+        BackupInfra->>Postgres: SELECT * FROM leaderboard
+        BackupInfra-->>LeaderboardApplication: scores[]
+        loop For each score
+            LeaderboardApplication->>Redis: ZADD leaderboard:global
+        end
+    end
+    LeaderboardAdapter->>LeaderboardApplication: WatchLeaderboard(ctx, listReq)
+    LeaderboardApplication->>Redis: ZREVRANGE leaderboard:global 0 49
+    LeaderboardApplication-->>LeaderboardAdapter: channel <- Leaderboard (initial)
     LeaderboardAdapter-->>SSEClient: data: {leaderboard JSON}\n\n (initial)
+    LeaderboardApplication->>Redis: SUBSCRIBE leaderboard:updates
     
     Note over Redis,SSEClient: When score is updated...
-    Redis-->>LeaderboardAdapter: PUBLISH notification received
-    LeaderboardAdapter->>Redis: ZREVRANGE leaderboard:global 0 99
+    Redis-->>LeaderboardApplication: PUBLISH notification received
+    LeaderboardApplication->>Redis: ZREVRANGE leaderboard:global 0 49
+    LeaderboardApplication-->>LeaderboardAdapter: channel <- Leaderboard (updated)
     LeaderboardAdapter-->>SSEClient: data: {updated leaderboard JSON}\n\n
 ```
 
@@ -166,12 +179,14 @@ sequenceDiagram
    - Notification is published to Redis pub/sub channel (`PUBLISH leaderboard:updates`)
 
 3. **Real-Time Updates**:
-   - SSE clients connect to leaderboard endpoint (`GET /api/v1/leaderboard`)
-   - SSE handlers subscribe to Redis pub/sub channel (`SUBSCRIBE leaderboard:updates`)
-   - Initial leaderboard data is fetched from Redis and sent to client
-   - When a notification is received from pub/sub:
-     - Handler fetches fresh leaderboard data from Redis sorted sets (`ZREVRANGE` command)
-     - Updated leaderboard is sent to client via SSE (`data: {json}\n\n` format)
+   - SSE clients connect to leaderboard endpoint (`GET /api/v1/leaderboard?limit=50`)
+   - Handler calls `SyncFromPostgres()` for lazy loading - syncs PostgreSQL data to Redis if Redis is empty
+   - Handler calls `WatchLeaderboard()` which:
+     - Fetches initial leaderboard from Redis and sends to channel
+     - Subscribes to Redis pub/sub channel (`SUBSCRIBE leaderboard:updates`) in application layer
+     - On each pub/sub notification, fetches fresh leaderboard and sends to channel
+   - Handler reads from channel and streams to client via SSE (`data: {json}\n\n` format)
+   - Handler only manages SSE connection lifecycle - all business logic is in application layer
 
 ### Data Storage Strategy
 
@@ -179,10 +194,12 @@ sequenceDiagram
   - Uses UPSERT pattern - creates record if user doesn't exist, updates if exists
   - Serves as backup/recovery mechanism if Redis data is lost
   - Can be queried to rebuild Redis leaderboard if needed
+  - **Lazy Loading**: On first leaderboard request, if Redis is empty, data is automatically synced from PostgreSQL
 
 - **Redis**: Stores leaderboard in sorted sets for efficient real-time queries
   - Primary source of truth for leaderboard rankings
   - Provides O(log(N)) complexity for insertions and range queries
+  - Automatically populated from PostgreSQL on first request if empty (lazy loading)
   - See [Redis Strategy](./redis-strategy.md) for detailed implementation
 
 ### Benefits

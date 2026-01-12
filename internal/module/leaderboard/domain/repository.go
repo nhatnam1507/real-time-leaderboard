@@ -6,6 +6,7 @@ import "context"
 // This stores only the highest score per user as a backup/recovery mechanism for Redis
 type LeaderboardBackupRepository interface {
 	UpsertScore(ctx context.Context, userID string, point int64) (*Score, error)
+	GetAllScores(ctx context.Context) ([]Score, error)
 }
 
 // LeaderboardRepository defines the interface for leaderboard operations in Redis

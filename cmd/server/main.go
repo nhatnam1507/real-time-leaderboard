@@ -68,12 +68,12 @@ func main() {
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
 	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, redisClient.GetClient(), l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
 	scoreHandler := v1Leaderboard.NewScoreHandler(scoreUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, redisClient.GetClient())
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase)
 
 	// Setup router
 	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)

@@ -259,28 +259,17 @@
     },
     "/leaderboard": {
       "get": {
-        "description": "Server-Sent Events (SSE) stream for real-time leaderboard updates.\nReturns `text/event-stream` content type. Clients receive initial leaderboard data\nand automatic updates when scores change. Updates are pushed via Redis pub/sub\nnotifications - no polling required.\n",
+        "description": "Server-Sent Events (SSE) stream for real-time leaderboard updates.\nReturns `text/event-stream` content type. Clients receive initial leaderboard data\nand automatic updates when scores change. Updates are pushed via Redis pub/sub\nnotifications - no polling required.\n\n**Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL\non the first request, ensuring seed data and existing scores are available.\n\n**Pagination**: The `limit` parameter controls how many top players to return (default: 100, max: 100).\nThe leaderboard always shows top N players starting from rank 1 (no offset support for SSE).\n",
         "parameters": [
           {
-            "description": "Number of top players",
+            "description": "Number of top players to return (always starts from rank 1)",
             "in": "query",
             "name": "limit",
             "schema": {
-              "default": 10,
-              "example": 10,
+              "default": 100,
+              "example": 50,
               "maximum": 100,
               "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Number of results to skip",
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "default": 0,
-              "example": 0,
-              "minimum": 0,
               "type": "integer"
             }
           }
