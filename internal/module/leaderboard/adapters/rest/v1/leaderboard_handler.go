@@ -7,8 +7,10 @@ import (
 	"strconv"
 	"time"
 
+	"real-time-leaderboard/internal/module/leaderboard/adapters"
 	"real-time-leaderboard/internal/module/leaderboard/application"
-	"real-time-leaderboard/internal/shared/request"
+	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,12 +25,14 @@ const (
 // LeaderboardHandler handles HTTP requests for leaderboards
 type LeaderboardHandler struct {
 	leaderboardUseCase *application.LeaderboardUseCase
+	broadcast          *adapters.LeaderboardBroadcast
 }
 
 // NewLeaderboardHandler creates a new leaderboard HTTP handler
-func NewLeaderboardHandler(leaderboardUseCase *application.LeaderboardUseCase) *LeaderboardHandler {
+func NewLeaderboardHandler(leaderboardUseCase *application.LeaderboardUseCase, broadcast *adapters.LeaderboardBroadcast) *LeaderboardHandler {
 	return &LeaderboardHandler{
 		leaderboardUseCase: leaderboardUseCase,
+		broadcast:          broadcast,
 	}
 }
 
@@ -52,21 +56,27 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 		}
 	}
 
-	listReq := request.ListRequest{
-		PaginationRequest: request.PaginationRequest{
-			Limit:  limit,
-			Offset: 0, // Always 0 for SSE
-		},
-	}
-
 	// Create context for the request
 	ctx := c.Request.Context()
 
 	// Sync from PostgreSQL if needed (lazy loading)
 	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
-	// Get update channel from use case (handles Redis pub/sub)
-	updateCh := h.leaderboardUseCase.WatchLeaderboard(ctx, &listReq)
+	// Register with broadcaster (gets channel for full leaderboard)
+	updateCh := h.broadcast.RegisterClient(ctx)
+
+	// Fetch initial leaderboard (with lazy load)
+	fullLeaderboard, err := h.leaderboardUseCase.GetFullLeaderboard(ctx)
+	if err != nil {
+		// If we can't get initial leaderboard, still try to stream updates
+		fullLeaderboard = &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
+	}
+
+	// Extract limit from full leaderboard
+	filteredLeaderboard := extractLimit(fullLeaderboard, limit)
+
+	// Send initial leaderboard via SSE using standard response format
+	sendSSEResponse(c, filteredLeaderboard, "Leaderboard retrieved successfully")
 
 	// Set up keep-alive ticker
 	ticker := time.NewTicker(keepAliveInterval)
@@ -75,29 +85,58 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Handle client disconnection
 	notify := c.Writer.CloseNotify()
 
-	// Stream events to client
+	// Keep connection, push updates from broadcaster
 	for {
 		select {
 		case <-notify:
 			// Client disconnected
 			return
 
-		case leaderboard, ok := <-updateCh:
+		case fullLeaderboard, ok := <-updateCh:
 			if !ok {
 				// Channel closed, connection ended
 				return
 			}
 
-			// Send leaderboard update to client
-			message, _ := json.Marshal(leaderboard)
-			_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", message)
-			c.Writer.Flush()
+			// Extract limit from full leaderboard
+			filtered := extractLimit(fullLeaderboard, limit)
+
+			// Send leaderboard update to client using standard response format
+			sendSSEResponse(c, filtered, "Leaderboard updated")
 
 		case <-ticker.C:
 			// Send keep-alive comment
 			_, _ = fmt.Fprintf(c.Writer, ": keep-alive\n\n")
 			c.Writer.Flush()
 		}
+	}
+}
+
+// sendSSEResponse sends a standard API response via SSE
+func sendSSEResponse(c *gin.Context, data interface{}, message string) {
+	resp := response.Response{
+		Success: true,
+		Data:    data,
+		Message: message,
+	}
+	messageBytes, _ := json.Marshal(resp)
+	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
+	c.Writer.Flush()
+}
+
+// extractLimit extracts the requested limit from full leaderboard
+func extractLimit(leaderboard *domain.Leaderboard, limit int) *domain.Leaderboard {
+	if leaderboard == nil {
+		return &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
+	}
+
+	if limit >= len(leaderboard.Entries) {
+		return leaderboard
+	}
+
+	return &domain.Leaderboard{
+		Entries: leaderboard.Entries[:limit],
+		Total:   leaderboard.Total,
 	}
 }
 

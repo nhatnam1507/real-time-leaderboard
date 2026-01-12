@@ -16,6 +16,7 @@ import (
 	authApp "real-time-leaderboard/internal/module/auth/application"
 	authJWT "real-time-leaderboard/internal/module/auth/infrastructure/jwt"
 	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
+	leaderboardAdapters "real-time-leaderboard/internal/module/leaderboard/adapters"
 	v1Leaderboard "real-time-leaderboard/internal/module/leaderboard/adapters/rest/v1"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
 	leaderboardInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/repository"
@@ -65,15 +66,19 @@ func main() {
 	backupRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
 	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
 
+	// Initialize broadcast service (adapter layer)
+	leaderboardBroadcast := leaderboardAdapters.NewLeaderboardBroadcast(leaderboardRepo, backupRepo, redisClient.GetClient(), l)
+	defer leaderboardBroadcast.Stop()
+
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
 	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, redisClient.GetClient(), l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
 	scoreHandler := v1Leaderboard.NewScoreHandler(scoreUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, leaderboardBroadcast)
 
 	// Setup router
 	router := setupRouter(cfg, l, authUseCase, authHandler, scoreHandler, leaderboardHandler)
