@@ -143,7 +143,8 @@ The architecture consists of four concentric layers, each with specific responsi
 **Rules**:
 - Depends only on domain layer
 - Defines repository interfaces that represent application needs
-- No direct infrastructure access - uses repository interfaces
+- Defines service interfaces for external systems (pub/sub, messaging, etc.)
+- No direct infrastructure access - uses repository and service interfaces
 - Contains business logic, not infrastructure details
 - Can call multiple repositories to compose results
 
@@ -168,14 +169,17 @@ The architecture consists of four concentric layers, each with specific responsi
 
 **Contains**:
 - Repository implementations (PostgreSQL, Redis)
+- Service implementations (Redis pub/sub, messaging, etc.)
 - DTOs (Data Transfer Objects) for database operations
 - External service clients
 
 **Rules**:
 - Implements application repository interfaces
+- Implements application service interfaces (e.g., BroadcastService)
 - Uses DTOs internally (with `db` tags, not `json` tags)
 - Maps DTOs to domain objects when returning
 - Database concerns (IDs, timestamps) stay here
+- Infrastructure-specific details (Redis commands, pub/sub) stay here
 
 ## Dependency Rules
 
@@ -216,7 +220,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 
 ### Domain Layer Rules
 
-1. **No Infrastructure Concerns**:
+1. **No Infrastructure Concerns**: Domain entities should represent pure business concepts, not database structures. Avoid database IDs, timestamps, or infrastructure-specific fields.
    ```go
    // ❌ Bad - contains database ID and timestamps
    type Score struct {
@@ -233,7 +237,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-2. **Repository Interfaces in Application Layer**:
+2. **Repository Interfaces in Application Layer**: Repository interfaces are defined in the application layer (representing application needs), not in the domain layer. They return domain objects, not DTOs.
    ```go
    // ✅ Good - repository interface in application layer, returns domain object
    // application/repository.go
@@ -247,7 +251,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-3. **Constants in Domain**:
+3. **Constants in Domain**: Domain constants (like Redis keys, topics) belong in the domain layer as they represent business concepts.
    ```go
    // ✅ Good - domain constants
    const (
@@ -258,7 +262,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 
 ### Infrastructure Layer Rules
 
-1. **Use DTOs with Database Tags**:
+1. **Use DTOs with Database Tags**: Infrastructure layer uses Data Transfer Objects (DTOs) with database tags (`db:`) for database operations. These are internal to the infrastructure layer.
    ```go
    // ✅ Good - DTO with db tags
    type Score struct {
@@ -269,7 +273,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-2. **Map DTOs to Domain Objects**:
+2. **Map DTOs to Domain Objects**: Infrastructure implementations map DTOs to domain objects when returning data to the application layer. Domain objects are the contract between layers.
    ```go
    // ✅ Good - maps DTO to domain
    func (r *PostgresRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
@@ -284,7 +288,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-3. **Keep DTOs Private**:
+3. **Keep DTOs Private**: DTOs should be unexported (lowercase) as they are internal implementation details of the infrastructure layer.
    ```go
    // ✅ Good - DTO is internal to infrastructure
    type score struct {  // lowercase = unexported
@@ -292,9 +296,11 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
+4. **Implement Service Interfaces**: Infrastructure implements service interfaces (like `BroadcastService`) defined in the application layer, handling all infrastructure-specific details (Redis commands, pub/sub connections, etc.).
+
 ### Application Layer Rules
 
-1. **Enrich Domain Objects**:
+1. **Enrich Domain Objects**: Application layer orchestrates data from multiple sources to enrich domain objects. For example, combining leaderboard rankings with user information.
    ```go
    // ✅ Good - enriches domain objects with data from multiple sources
    func (uc *UseCase) GetFullLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
@@ -305,20 +311,55 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-2. **Orchestrate, Don't Implement**:
+2. **Orchestrate, Don't Implement**: Use cases orchestrate business logic by calling multiple repositories/services. They don't implement low-level details - those belong in infrastructure.
    ```go
-   // ✅ Good - orchestrates business logic
-   func (uc *UseCase) SubmitScore(ctx context.Context, userID string, point int64) error {
-       if err := uc.backupRepo.UpsertScore(ctx, userID, point); err != nil {
+   // ✅ Good - orchestrates business logic and coordinates services
+   func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
+       // Update data in repositories
+       if err := uc.backupRepo.UpsertScore(ctx, userID, req.Score); err != nil {
            return err
        }
-       return uc.leaderboardRepo.UpdateScore(ctx, userID, point)
+       if err := uc.leaderboardRepo.UpdateScore(ctx, userID, req.Score); err != nil {
+           return err
+       }
+       // Publish notification via broadcast service (not repository)
+       return uc.broadcastService.PublishScoreUpdate(ctx)
    }
+   ```
+
+3. **Define Service Interfaces for External Systems**: Service interfaces (like `BroadcastService` for pub/sub) are defined in the application layer. Use cases depend on these interfaces, not concrete implementations. Infrastructure implements these interfaces.
+   ```go
+   // ✅ Good - service interface in application layer
+   // application/broadcast_service.go
+   type BroadcastService interface {
+       PublishScoreUpdate(ctx context.Context) error  // Publish notifications
+       SubscribeToScoreUpdates(ctx context.Context) (<-chan struct{}, error)
+       BroadcastLeaderboard(ctx context.Context, leaderboard *domain.Leaderboard) error
+       SubscribeToLeaderboardUpdates(ctx context.Context) (<-chan *domain.Leaderboard, error)
+   }
+   
+   // ✅ Good - use case uses interface, not concrete implementation
+   type ScoreUseCase struct {
+       broadcastService BroadcastService  // interface, not *RedisBroadcastService
+       leaderboardRepo LeaderboardRepository
+       // ... other dependencies
+   }
+   
+   // ✅ Good - repository only updates data, use case publishes notifications
+   func (uc *ScoreUseCase) SubmitScore(...) error {
+       uc.leaderboardRepo.UpdateScore(...)  // Only updates data
+       uc.broadcastService.PublishScoreUpdate(...)  // Publishes notification
+   }
+   
+   // Infrastructure implements the interface
+   // infrastructure/broadcast/redis_broadcast_service.go
+   type RedisBroadcastService struct { ... }
+   func (s *RedisBroadcastService) PublishScoreUpdate(...) error { ... }
    ```
 
 ### Adapters Layer Rules
 
-1. **Delegate to Application Layer**:
+1. **Delegate to Application Layer**: Adapters delegate all business logic to the application layer (use cases). They handle protocol-specific concerns only.
    ```go
    // ✅ Good - delegates to use case
    func (h *Handler) SubmitScore(c *gin.Context) {
@@ -330,12 +371,12 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-2. **Handle Protocol Concerns Only**:
+2. **Handle Protocol Concerns Only**: Adapters manage connection lifecycles (SSE, WebSocket), request/response transformation, and protocol-specific headers. Business logic stays in the application layer.
    ```go
    // ✅ Good - handles SSE connection lifecycle
    func (h *Handler) GetLeaderboard(c *gin.Context) {
        c.Header("Content-Type", "text/event-stream")
-       updateCh := h.broadcast.RegisterClient(ctx)
+       updateCh := h.useCase.SubscribeToLeaderboardUpdates(ctx)
        // ... manage connection
    }
    ```

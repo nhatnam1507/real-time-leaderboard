@@ -16,9 +16,9 @@ import (
 	authApp "real-time-leaderboard/internal/module/auth/application"
 	authJWT "real-time-leaderboard/internal/module/auth/infrastructure/jwt"
 	authInfra "real-time-leaderboard/internal/module/auth/infrastructure/repository"
-	leaderboardAdapters "real-time-leaderboard/internal/module/leaderboard/adapters"
 	v1Leaderboard "real-time-leaderboard/internal/module/leaderboard/adapters/rest/v1"
 	leaderboardApp "real-time-leaderboard/internal/module/leaderboard/application"
+	leaderboardBroadcastInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/broadcast"
 	leaderboardInfra "real-time-leaderboard/internal/module/leaderboard/infrastructure/repository"
 	"real-time-leaderboard/internal/shared/database"
 	"real-time-leaderboard/internal/shared/logger"
@@ -67,18 +67,25 @@ func main() {
 	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
 	leaderboardUserRepo := leaderboardInfra.NewUserRepository(db.Pool)
 
-	// Initialize broadcast service (adapter layer)
-	leaderboardBroadcast := leaderboardAdapters.NewLeaderboardBroadcast(leaderboardRepo, backupRepo, leaderboardUserRepo, redisClient.GetClient(), l)
-	defer leaderboardBroadcast.Stop()
+	// Initialize broadcast service (infrastructure layer)
+	broadcastService := leaderboardBroadcastInfra.NewRedisBroadcastService(redisClient.GetClient(), l)
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
-	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, leaderboardUserRepo, l)
+	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, broadcastService, l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, leaderboardUserRepo, broadcastService, l)
+
+	// Start broadcasting in background
+	ctx := context.Background()
+	go func() {
+		if err := leaderboardUseCase.StartBroadcasting(ctx); err != nil {
+			l.Errorf(ctx, "Broadcast service error: %v", err)
+		}
+	}()
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase, leaderboardBroadcast)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase)
 
 	// Setup router
 	router := setupRouter(cfg, l, authUseCase, authHandler, leaderboardHandler)
@@ -193,11 +200,8 @@ func setupAPIRouter(
 		// Auth routes (no auth required)
 		authHandler.RegisterRoutes(v1PublicGroup)
 
-		// Public routes (leaderboard stream - no auth required)
-		if leaderboardHandler != nil {
-			leaderboardGroup := v1PublicGroup.Group("/leaderboard")
-			leaderboardGroup.GET("/stream", leaderboardHandler.GetLeaderboard)
-		}
+		// Public leaderboard routes (no auth required)
+		leaderboardHandler.RegisterPublicRoutes(v1PublicGroup)
 	}
 
 	// Protected routes group (auth required)
@@ -205,11 +209,8 @@ func setupAPIRouter(
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
-		// Protected routes (leaderboard score - auth required)
-		if leaderboardHandler != nil {
-			leaderboardGroup := v1ProtectedGroup.Group("/leaderboard")
-			leaderboardGroup.PUT("/score", leaderboardHandler.SubmitScore)
-		}
+		// Protected leaderboard routes (auth required)
+		leaderboardHandler.RegisterProtectedRoutes(v1ProtectedGroup)
 	}
 }
 

@@ -77,11 +77,10 @@ The server will start on `http://localhost:8080`
 For detailed documentation, see the [docs](./docs/) folder:
 
 - **[Application Features & Flows](./docs/application.md)** - Application features, user flows, and API usage
-- **[Architecture](./docs/architecture.md)** - Clean architecture principles, project structure, and coding conventions
+- **[Architecture](./docs/architecture.md)** - Clean architecture principles, project structure, coding conventions, and infrastructure details
 - **[Modules](./docs/modules.md)** - Detailed module documentation
 - **[Development Guide](./docs/development.md)** - Development setup, testing, and best practices
 - **[Microservice Migration](./docs/microservice-migration.md)** - Guide for extracting modules to microservices
-- **[Redis Strategy](./docs/redis-strategy.md)** - Redis sorted sets implementation details
 
 ### API Documentation
 

@@ -22,7 +22,7 @@ func NewRedisLeaderboardRepository(client *redis.Client) application.Leaderboard
 	return &RedisLeaderboardRepository{client: client}
 }
 
-// UpdateScore updates the score in the leaderboard
+// UpdateScore updates the score in the leaderboard (does not publish notifications)
 func (r *RedisLeaderboardRepository) UpdateScore(ctx context.Context, userID string, score int64) error {
 	err := r.client.ZAdd(ctx, domain.RedisLeaderboardKey, redis.Z{
 		Score:  float64(score),
@@ -32,19 +32,14 @@ func (r *RedisLeaderboardRepository) UpdateScore(ctx context.Context, userID str
 		return fmt.Errorf("failed to update score in leaderboard: %w", err)
 	}
 
-	// Publish update notification to Redis pub/sub using domain constant
-	r.client.Publish(ctx, domain.RedisScoreUpdateTopic, "updated")
-
 	return nil
 }
 
 // GetTopPlayers retrieves the top N players from the leaderboard with offset support
 func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error) {
-	// Calculate Redis range: start = offset, stop = offset + limit - 1
 	start := offset
 	stop := offset + limit - 1
 
-	// Get top players (highest scores first) with offset
 	results, err := r.client.ZRevRangeWithScores(ctx, domain.RedisLeaderboardKey, start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top players: %w", err)
@@ -57,7 +52,6 @@ func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, limit, o
 			continue
 		}
 
-		// Rank is 1-indexed and accounts for offset
 		rank := offset + int64(i) + 1
 
 		entries = append(entries, domain.LeaderboardEntry{

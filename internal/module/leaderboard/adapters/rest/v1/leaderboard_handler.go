@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"real-time-leaderboard/internal/module/leaderboard/adapters"
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/middleware"
@@ -28,19 +27,16 @@ const (
 type LeaderboardHandler struct {
 	leaderboardUseCase *application.LeaderboardUseCase
 	scoreUseCase       *application.ScoreUseCase
-	broadcast          *adapters.LeaderboardBroadcast
 }
 
 // NewLeaderboardHandler creates a new leaderboard HTTP handler
 func NewLeaderboardHandler(
 	leaderboardUseCase *application.LeaderboardUseCase,
 	scoreUseCase *application.ScoreUseCase,
-	broadcast *adapters.LeaderboardBroadcast,
 ) *LeaderboardHandler {
 	return &LeaderboardHandler{
 		leaderboardUseCase: leaderboardUseCase,
 		scoreUseCase:       scoreUseCase,
-		broadcast:          broadcast,
 	}
 }
 
@@ -67,13 +63,19 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Create context for the request
 	ctx := c.Request.Context()
 
-	// Sync from PostgreSQL if needed (lazy loading)
+	// Sync from PostgreSQL to Redis if needed (lazy loading)
 	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
-	// Register with broadcaster (gets channel for full leaderboard)
-	updateCh := h.broadcast.RegisterClient(ctx)
+	// Subscribe to leaderboard updates (gets channel for full leaderboard)
+	updateCh, err := h.leaderboardUseCase.SubscribeToLeaderboardUpdates(ctx)
+	if err != nil {
+		// If subscription fails, create a closed channel
+		closedCh := make(chan *domain.Leaderboard)
+		close(closedCh)
+		updateCh = closedCh
+	}
 
-	// Fetch initial leaderboard (with lazy load)
+	// Fetch initial leaderboard
 	fullLeaderboard, err := h.leaderboardUseCase.GetFullLeaderboard(ctx)
 	if err != nil {
 		// If we can't get initial leaderboard, still try to stream updates
@@ -173,4 +175,20 @@ func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"user_id": userID, "score": req.Score}, "Score updated successfully")
+}
+
+// RegisterPublicRoutes registers public leaderboard routes (no auth required)
+func (h *LeaderboardHandler) RegisterPublicRoutes(router *gin.RouterGroup) {
+	leaderboard := router.Group("/leaderboard")
+	{
+		leaderboard.GET("/stream", h.GetLeaderboard)
+	}
+}
+
+// RegisterProtectedRoutes registers protected leaderboard routes (auth required)
+func (h *LeaderboardHandler) RegisterProtectedRoutes(router *gin.RouterGroup) {
+	leaderboard := router.Group("/leaderboard")
+	{
+		leaderboard.PUT("/score", h.SubmitScore)
+	}
 }

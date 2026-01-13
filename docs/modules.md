@@ -30,16 +30,22 @@ The system is organized into self-contained modules, each following Clean Archit
   - `LeaderboardBackupRepository` interface
   - `LeaderboardRepository` interface
   - `UserRepository` interface (module-owned, not from auth module)
-  - `SubmitScoreUseCase` - Updates score in PostgreSQL and Redis
-  - `SyncFromPostgresUseCase` - Lazy loading from PostgreSQL to Redis
-  - `GetFullLeaderboardUseCase` - Fetches leaderboard and enriches with usernames
+  - `BroadcastService` interface - For real-time leaderboard broadcasting (publishes notifications)
+  - `ScoreUseCase` - Updates score in PostgreSQL and Redis, publishes notifications via broadcast service
+  - `LeaderboardUseCase` - Handles leaderboard queries, enrichment, and broadcasting:
+    - `SyncFromPostgres()` - Lazy loading from PostgreSQL to Redis
+    - `GetFullLeaderboard()` - Fetches leaderboard and enriches with usernames
+    - `StartBroadcasting()` - Listens to score updates and broadcasts leaderboard
+    - `SubscribeToLeaderboardUpdates()` - Provides subscription channel for SSE handlers
 - **Adapters**: 
-  - `LeaderboardHandler` - Single HTTP handler for score update and leaderboard retrieval (SSE)
-  - `LeaderboardBroadcast` - Broadcast service for real-time updates
+  - `LeaderboardHandler` - HTTP handler for score update and leaderboard retrieval (SSE)
+    - `RegisterPublicRoutes()` - Registers public routes (SSE stream)
+    - `RegisterProtectedRoutes()` - Registers protected routes (score submission)
 - **Infrastructure**: 
   - PostgreSQL `LeaderboardBackupRepository` - Stores scores, `GetLeaderboard()` with username JOIN
   - Redis `LeaderboardRepository` - Sorted sets for real-time queries
   - PostgreSQL `UserRepository` - Batch username fetching for leaderboard module
+  - Redis `BroadcastService` (`RedisBroadcastService`) - Implements pub/sub for real-time leaderboard broadcasting
 
 **Endpoints**:
 - `PUT /api/v1/leaderboard/score` - Update score (authenticated)
@@ -54,9 +60,11 @@ The system is organized into self-contained modules, each following Clean Archit
   - PostgreSQL `GetLeaderboard()` includes usernames via JOIN
   - Redis entries enriched with usernames via batch fetch in application layer
 - **Broadcast Service**: 
+  - Publishes score update notifications (triggered by use cases, not repositories)
   - Centralized service processes score updates once
   - Uses distributed lock for multi-instance deployments
   - Publishes full leaderboard to all connected clients
+  - Repositories only update data, broadcast service handles all pub/sub concerns
 - **Module Independence**: Owns its `UserRepository` interface (no dependency on auth module)
 
-For detailed flows, see [Architecture](./architecture.md) and [Redis Strategy](./redis-strategy.md).
+For detailed flows, see [Architecture](./architecture.md) and [Application Features](./application.md).

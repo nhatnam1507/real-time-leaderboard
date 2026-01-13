@@ -1,0 +1,125 @@
+---
+alwaysApply: true
+---
+
+# Code Comments Rules
+
+## Core Principles
+
+1. **Explain "Why", Not "What"**: Comments should explain the reasoning behind code, not restate what the code does.
+2. **Self-Documenting Code First**: Write clear code that doesn't need comments. If code needs explanation, improve the code first.
+3. **Keep Comments Up-to-Date**: Outdated comments are worse than no comments. Delete or update comments when code changes.
+
+## When to Comment
+
+### ✅ DO Comment:
+- **Public APIs**: All exported functions, types, and packages must have comments (Go requirement)
+- **Complex business logic**: Non-obvious business rules or domain logic
+- **Non-obvious "why"**: Decisions that aren't clear from the code itself
+- **Workarounds**: Temporary fixes, known issues, or platform-specific workarounds
+- **Performance optimizations**: When code is optimized in a non-obvious way
+- **Algorithm explanations**: Complex algorithms that benefit from explanation
+
+### ❌ DON'T Comment:
+- **Obvious code**: Code that clearly states its intent
+- **Variable declarations**: Self-explanatory variable names don't need comments
+- **Simple functions**: Functions with clear names and straightforward logic
+- **Commented-out code**: Delete it instead
+
+## Comment Style Guidelines
+
+### Package Comments
+```go
+// Package application provides use cases for the leaderboard module.
+package application
+```
+- Start with "Package [name]"
+- One sentence describing the package's purpose
+- Required for all packages
+
+### Function Comments
+```go
+// SubmitScore upserts the score for a user in both backup and leaderboard systems.
+// It publishes a score update notification after successful updates.
+func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error
+```
+- Start with function name (no "This function...")
+- Use imperative mood ("Retrieves", "Updates", "Creates")
+- Explain behavior, not implementation details
+- For complex functions, add additional context on separate lines
+
+### Type Comments
+```go
+// ScoreUseCase handles score submission and synchronization between backup and leaderboard systems.
+type ScoreUseCase struct {
+    // ...
+}
+```
+- One sentence describing the type's purpose
+- Explain the type's role in the system
+
+### Inline Comments
+```go
+// SyncFromPostgres syncs all leaderboard entries from PostgreSQL to Redis.
+// Called lazily when Redis is empty. UpdateScore doesn't publish, so no broadcasts triggered.
+func (uc *LeaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
+    // ...
+}
+```
+- Use sparingly, only when necessary
+- Explain "why" something is done, not "what"
+- Place on the line above the code being explained
+- Keep concise (one line when possible)
+
+## Go-Specific Rules
+
+1. **Exported Identifiers**: Must have comments starting with the identifier name
+2. **Comment Format**: Use `//` for single-line, `/* */` only for multi-line blocks
+3. **godoc**: Comments should be godoc-compatible (no leading blank line for package comments)
+
+## Examples
+
+### ✅ Good Comments
+```go
+// Package domain contains pure business entities with no infrastructure dependencies.
+package domain
+
+// LeaderboardEntry represents a user's position in the leaderboard.
+// Rank is 1-indexed (1 = highest score).
+type LeaderboardEntry struct {
+    UserID   string
+    Username string
+    Score    int64
+    Rank     int64
+}
+
+// UpdateScore updates the user's score in Redis sorted set.
+// Returns nil if Redis update fails (non-critical for backup persistence).
+func (uc *ScoreUseCase) UpdateScore(ctx context.Context, userID string, score int64) error {
+    // ...
+}
+```
+
+### ❌ Bad Comments
+```go
+// This function updates the score
+func UpdateScore(score int64) {
+    // Set the score variable
+    s := score
+    // Return the score
+    return s
+}
+
+// Bad: Commented-out code should be deleted
+// func oldFunction() {
+//     ...
+// }
+```
+
+## Best Practices
+
+1. **Be Concise**: One sentence is often enough
+2. **Be Accurate**: Ensure comments match the code
+3. **Use Complete Sentences**: Start with capital letter, end with period
+4. **Avoid Redundancy**: Don't repeat what the code clearly shows
+5. **Update with Code**: When refactoring, update or remove related comments

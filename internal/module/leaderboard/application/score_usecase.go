@@ -10,21 +10,24 @@ import (
 
 // ScoreUseCase handles score use cases
 type ScoreUseCase struct {
-	backupRepo      LeaderboardBackupRepository
-	leaderboardRepo LeaderboardRepository
-	logger          *logger.Logger
+	backupRepo       LeaderboardBackupRepository
+	leaderboardRepo  LeaderboardRepository
+	broadcastService BroadcastService
+	logger           *logger.Logger
 }
 
 // NewScoreUseCase creates a new score use case
 func NewScoreUseCase(
 	backupRepo LeaderboardBackupRepository,
 	leaderboardRepo LeaderboardRepository,
+	broadcastService BroadcastService,
 	l *logger.Logger,
 ) *ScoreUseCase {
 	return &ScoreUseCase{
-		backupRepo:      backupRepo,
-		leaderboardRepo: leaderboardRepo,
-		logger:          l,
+		backupRepo:       backupRepo,
+		leaderboardRepo:  leaderboardRepo,
+		broadcastService: broadcastService,
+		logger:           l,
 	}
 }
 
@@ -34,20 +37,19 @@ type SubmitScoreRequest struct {
 }
 
 // SubmitScore upserts the score for a user
-// Creates record if it doesn't exist, updates if it exists
 func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
-	// Upsert score in PostgreSQL (creates if not exists, updates if exists)
-	// This serves as backup/recovery mechanism for Redis
 	if err := uc.backupRepo.UpsertScore(ctx, userID, req.Score); err != nil {
 		uc.logger.Errorf(ctx, "Failed to upsert score: %v", err)
 		return response.NewInternalError("Failed to update score", err)
 	}
 
-	// Update Redis leaderboard with the new score (publishes to Redis pub/sub)
-	// This is the source of truth for real-time leaderboard queries
 	if err := uc.leaderboardRepo.UpdateScore(ctx, userID, req.Score); err != nil {
 		uc.logger.Errorf(ctx, "Failed to update leaderboard: %v", err)
-		// Don't fail the request if leaderboard update fails - PostgreSQL backup is still updated
+		return nil
+	}
+
+	if err := uc.broadcastService.PublishScoreUpdate(ctx); err != nil {
+		uc.logger.Warnf(ctx, "Failed to publish score update notification: %v", err)
 	}
 
 	uc.logger.Infof(ctx, "Score updated: user=%s, score=%d", userID, req.Score)
