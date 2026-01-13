@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 
 	"github.com/redis/go-redis/v9"
@@ -17,7 +18,7 @@ type RedisLeaderboardRepository struct {
 }
 
 // NewRedisLeaderboardRepository creates a new Redis leaderboard repository
-func NewRedisLeaderboardRepository(client *redis.Client) *RedisLeaderboardRepository {
+func NewRedisLeaderboardRepository(client *redis.Client) application.LeaderboardRepository {
 	return &RedisLeaderboardRepository{client: client}
 }
 

@@ -11,11 +11,12 @@
 
 1. Create module directory: `internal/module/{module_name}/`
 2. Create layers: `domain/`, `application/`, `adapters/`, `infrastructure/`
-3. Define domain entities and repository interfaces
-4. Implement use cases in application layer
-5. Create HTTP handlers in adapters layer
-6. Implement repositories in infrastructure layer
-7. Wire everything in `cmd/server/main.go`
+3. Define domain entities (core business objects)
+4. Define repository interfaces in application layer
+5. Implement use cases in application layer
+6. Create HTTP handlers in adapters layer
+7. Implement repositories in infrastructure layer
+8. Wire everything in `cmd/server/main.go`
 
 ## Makefile Commands
 

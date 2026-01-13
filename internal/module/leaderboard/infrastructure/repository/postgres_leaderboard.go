@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,7 +19,7 @@ type PostgresLeaderboardRepository struct {
 }
 
 // NewPostgresLeaderboardRepository creates a new PostgreSQL leaderboard backup repository
-func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) *PostgresLeaderboardRepository {
+func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) application.LeaderboardBackupRepository {
 	return &PostgresLeaderboardRepository{pool: pool}
 }
 

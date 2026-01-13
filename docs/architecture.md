@@ -83,8 +83,8 @@ Each module is self-contained and follows a consistent structure with four layer
 
 ```
 module/
-├── domain/          # Business entities and repository interfaces
-├── application/     # Use cases and business logic orchestration
+├── domain/          # Business entities and domain services (if needed)
+├── application/     # Use cases, business logic orchestration, and repository interfaces
 ├── adapters/        # HTTP handlers and external interface adapters
 └── infrastructure/  # Repository implementations and external services
 ```
@@ -92,8 +92,9 @@ module/
 **Key Points**:
 - Each module is independent - no cross-module imports
 - Layers depend inward: Adapters → Application → Domain ← Infrastructure
-- Domain layer has zero external dependencies
-- Infrastructure implements domain interfaces
+- Domain layer has zero external dependencies - contains only core business objects
+- Repository interfaces are defined in application layer (application needs, not domain concepts)
+- Infrastructure implements application repository interfaces
 
 ## Layer Structure & Responsibilities
 
@@ -105,7 +106,7 @@ The architecture consists of four concentric layers, each with specific responsi
 ├─────────────────────────────────────┤
 │      Application Layer              │  ← Use cases, business logic orchestration
 ├─────────────────────────────────────┤
-│      Domain Layer                   │  ← Entities, repository interfaces (no deps)
+│      Domain Layer                   │  ← Entities (core business objects, no deps)
 ├─────────────────────────────────────┤
 │      Infrastructure Layer (Output)  │  ← Repository implementations, external services
 └─────────────────────────────────────┘
@@ -115,18 +116,19 @@ The architecture consists of four concentric layers, each with specific responsi
 
 ### Domain Layer (`domain/`)
 
-**Purpose**: Contains pure business logic and rules
+**Purpose**: Contains pure business logic and core business objects
 
 **Contains**: 
 - Domain entities (business concepts only, no infrastructure concerns)
-- Repository interfaces (what the domain needs, not how it's implemented)
+- Domain services (if needed for complex business logic)
 - Domain constants (e.g., Redis keys, topics)
 
 **Rules**:
 - **Zero external dependencies** - no imports from other layers
 - No database IDs, timestamps, or infrastructure concerns
-- Repository interfaces return domain objects, not DTOs
+- No repository interfaces - these belong to the application layer
 - Pure Go code - no framework dependencies
+- Contains only core business objects and domain logic
 
 ### Application Layer (`application/`)
 
@@ -134,12 +136,14 @@ The architecture consists of four concentric layers, each with specific responsi
 
 **Contains**:
 - Use case structs and methods
+- Repository interfaces (application needs, not domain concepts)
 - Business logic orchestration
 - Data enrichment (combining data from multiple sources)
 
 **Rules**:
 - Depends only on domain layer
-- No direct infrastructure access - uses domain interfaces
+- Defines repository interfaces that represent application needs
+- No direct infrastructure access - uses repository interfaces
 - Contains business logic, not infrastructure details
 - Can call multiple repositories to compose results
 
@@ -168,16 +172,16 @@ The architecture consists of four concentric layers, each with specific responsi
 - External service clients
 
 **Rules**:
-- Implements domain repository interfaces
+- Implements application repository interfaces
 - Uses DTOs internally (with `db` tags, not `json` tags)
 - Maps DTOs to domain objects when returning
 - Database concerns (IDs, timestamps) stay here
 
 ## Dependency Rules
 
-1. **Domain Independence**: Domain layer has zero dependencies on other layers
-2. **Interface Segregation**: Repository interfaces are defined in domain, implemented in infrastructure
-3. **Dependency Inversion**: High-level modules (application) depend on abstractions (domain interfaces), not concrete implementations
+1. **Domain Independence**: Domain layer has zero dependencies on other layers - contains only core business objects
+2. **Interface Segregation**: Repository interfaces are defined in application layer (application needs), implemented in infrastructure
+3. **Dependency Inversion**: High-level modules (application) depend on abstractions (repository interfaces), not concrete implementations
 4. **Module Independence**: Each module owns its interfaces - no cross-module dependencies
 
 ## Shared Components
@@ -205,7 +209,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 ### File Organization
 
 - **Domain entities**: One file per entity or related entities (e.g., `leaderboard.go`)
-- **Repository interfaces**: Grouped in `repository.go` or split by concern
+- **Repository interfaces**: Grouped in `application/repository.go` or split by concern
 - **Use cases**: One file per use case or related use cases
 - **Handlers**: One file per handler or version group
 - **Repository implementations**: One file per repository implementation
@@ -229,11 +233,12 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    }
    ```
 
-2. **Repository Interfaces Return Domain Objects**:
+2. **Repository Interfaces in Application Layer**:
    ```go
-   // ✅ Good - returns domain object
+   // ✅ Good - repository interface in application layer, returns domain object
+   // application/repository.go
    type LeaderboardRepository interface {
-       GetTopPlayers(ctx context.Context, limit, offset int64) ([]LeaderboardEntry, error)
+       GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error)
    }
    
    // ❌ Bad - returns DTO
@@ -345,7 +350,7 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 ### Dependency Injection
 
 - All dependencies injected via constructors
-- Interfaces defined in domain, implementations in infrastructure
+- Repository interfaces defined in application layer, implementations in infrastructure
 - Wire dependencies in `cmd/server/main.go`
 - Enables easy testing with mocks
 
@@ -353,9 +358,9 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 
 Each module is self-contained:
 
-- **Own Domain**: Defines its own entities and repository interfaces
+- **Own Domain**: Defines its own entities (core business objects)
 - **No Cross-Module Dependencies**: Modules don't import from other modules
-- **Own Interfaces**: If a module needs user data, it defines its own `UserRepository` interface
+- **Own Interfaces**: If a module needs user data, it defines its own `UserRepository` interface in the application layer
 - **Extractable**: Each module can be extracted to a separate microservice
 
 This design ensures:

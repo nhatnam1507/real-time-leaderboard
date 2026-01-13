@@ -20,8 +20,8 @@ leaderboard-service/
 │       └── main.go
 ├── internal/
 │   ├── config/
-│   ├── domain/          # Domain entities and repository interfaces
-│   ├── application/     # Use cases and business logic
+│   ├── domain/          # Domain entities (core business objects)
+│   ├── application/     # Use cases, business logic, and repository interfaces
 │   ├── adapters/        # HTTP/WebSocket handlers
 │   └── infrastructure/  # Repository implementations (includes Redis, DB connections)
 ```
@@ -29,7 +29,7 @@ leaderboard-service/
 ## Benefits
 
 - **Clear Boundaries**: Each module owns its domain, infrastructure, and presentation
-- **Easy Testing**: Mock repository interfaces at domain level
+- **Easy Testing**: Mock repository interfaces at application level
 - **Independent Deployment**: Modules can be versioned and deployed separately
 - **Team Ownership**: Different teams can own different modules
 - **Technology Flexibility**: Each module can use different technologies

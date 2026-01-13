@@ -7,8 +7,8 @@ The system is organized into self-contained modules, each following Clean Archit
 **Purpose**: User authentication and authorization
 
 **Components**:
-- **Domain**: User entity, UserRepository interface
-- **Application**: RegisterUseCase, LoginUseCase, ValidateTokenUseCase, RefreshTokenUseCase
+- **Domain**: User entity
+- **Application**: UserRepository interface, RegisterUseCase, LoginUseCase, ValidateTokenUseCase, RefreshTokenUseCase
 - **Adapters**: HTTP handlers for registration, login, token refresh
 - **Infrastructure**: PostgreSQL UserRepository, JWT token manager
 
@@ -25,10 +25,11 @@ The system is organized into self-contained modules, each following Clean Archit
 - **Domain**: 
   - `LeaderboardEntry` (user_id, username, score, rank)
   - `Leaderboard` (entries, total)
+  - Domain constants (Redis keys, topics)
+- **Application**: 
   - `LeaderboardBackupRepository` interface
   - `LeaderboardRepository` interface
   - `UserRepository` interface (module-owned, not from auth module)
-- **Application**: 
   - `SubmitScoreUseCase` - Updates score in PostgreSQL and Redis
   - `SyncFromPostgresUseCase` - Lazy loading from PostgreSQL to Redis
   - `GetFullLeaderboardUseCase` - Fetches leaderboard and enriches with usernames

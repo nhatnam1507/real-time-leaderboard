@@ -11,17 +11,17 @@ import (
 
 // LeaderboardUseCase handles leaderboard use cases
 type LeaderboardUseCase struct {
-	leaderboardRepo domain.LeaderboardRepository
-	backupRepo      domain.LeaderboardBackupRepository
-	userRepo        domain.UserRepository
+	leaderboardRepo LeaderboardRepository
+	backupRepo      LeaderboardBackupRepository
+	userRepo        UserRepository
 	logger          *logger.Logger
 }
 
 // NewLeaderboardUseCase creates a new leaderboard use case
 func NewLeaderboardUseCase(
-	leaderboardRepo domain.LeaderboardRepository,
-	backupRepo domain.LeaderboardBackupRepository,
-	userRepo domain.UserRepository,
+	leaderboardRepo LeaderboardRepository,
+	backupRepo LeaderboardBackupRepository,
+	userRepo UserRepository,
 	l *logger.Logger,
 ) *LeaderboardUseCase {
 	return &LeaderboardUseCase{

@@ -4,22 +4,21 @@ package application
 import (
 	"context"
 
-	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/response"
 )
 
 // ScoreUseCase handles score use cases
 type ScoreUseCase struct {
-	backupRepo      domain.LeaderboardBackupRepository
-	leaderboardRepo domain.LeaderboardRepository
+	backupRepo      LeaderboardBackupRepository
+	leaderboardRepo LeaderboardRepository
 	logger          *logger.Logger
 }
 
 // NewScoreUseCase creates a new score use case
 func NewScoreUseCase(
-	backupRepo domain.LeaderboardBackupRepository,
-	leaderboardRepo domain.LeaderboardRepository,
+	backupRepo LeaderboardBackupRepository,
+	leaderboardRepo LeaderboardRepository,
 	l *logger.Logger,
 ) *ScoreUseCase {
 	return &ScoreUseCase{

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/logger"
 
@@ -16,9 +17,9 @@ import (
 
 // LeaderboardBroadcast handles broadcasting leaderboard updates to all connected clients
 type LeaderboardBroadcast struct {
-	leaderboardRepo domain.LeaderboardRepository
-	backupRepo      domain.LeaderboardBackupRepository
-	userRepo        domain.UserRepository
+	leaderboardRepo application.LeaderboardRepository
+	backupRepo      application.LeaderboardBackupRepository
+	userRepo        application.UserRepository
 	redisClient     *redis.Client
 	logger          *logger.Logger
 
@@ -33,9 +34,9 @@ type LeaderboardBroadcast struct {
 
 // NewLeaderboardBroadcast creates and starts broadcast service
 func NewLeaderboardBroadcast(
-	leaderboardRepo domain.LeaderboardRepository,
-	backupRepo domain.LeaderboardBackupRepository,
-	userRepo domain.UserRepository,
+	leaderboardRepo application.LeaderboardRepository,
+	backupRepo application.LeaderboardBackupRepository,
+	userRepo application.UserRepository,
 	redisClient *redis.Client,
 	logger *logger.Logger,
 ) *LeaderboardBroadcast {

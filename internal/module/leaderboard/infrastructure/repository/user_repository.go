@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/module/leaderboard/application"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,7 +17,7 @@ type PostgresUserRepository struct {
 }
 
 // NewUserRepository creates a new PostgreSQL user repository for the leaderboard module
-func NewUserRepository(pool *pgxpool.Pool) domain.UserRepository {
+func NewUserRepository(pool *pgxpool.Pool) application.UserRepository {
 	return &PostgresUserRepository{pool: pool}
 }
 
