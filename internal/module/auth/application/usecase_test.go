@@ -32,7 +32,7 @@ func TestAuthUseCase_Register_WhenValidRequest_ShouldCreateUserAndReturnTokens(t
 		Times(1)
 	mockUserRepo.EXPECT().
 		Create(ctx, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, user *domain.User) error {
+		DoAndReturn(func(_ context.Context, user *domain.User) error {
 			user.ID = "user-123"
 			return nil
 		}).
@@ -242,7 +242,7 @@ func TestAuthUseCase_Register_WhenGenerateTokenFails_ShouldReturnInternalError(t
 		Times(1)
 	mockUserRepo.EXPECT().
 		Create(ctx, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, user *domain.User) error {
+		DoAndReturn(func(_ context.Context, user *domain.User) error {
 			user.ID = "user-123"
 			return nil
 		}).
