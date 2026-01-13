@@ -1,6 +1,8 @@
 // Package application provides use cases for the auth module.
 package application
 
+//go:generate mockgen -source=usecase.go -destination=../mocks/jwt_mock.go -package=mocks JWTManager
+
 import (
 	"context"
 
@@ -13,7 +15,7 @@ import (
 
 // AuthUseCase handles authentication use cases
 type AuthUseCase struct {
-	userRepo domain.UserRepository
+	userRepo UserRepository
 	jwtMgr   JWTManager
 	logger   *logger.Logger
 }
@@ -25,7 +27,7 @@ type JWTManager interface {
 }
 
 // NewAuthUseCase creates a new auth use case
-func NewAuthUseCase(userRepo domain.UserRepository, jwtMgr JWTManager, l *logger.Logger) *AuthUseCase {
+func NewAuthUseCase(userRepo UserRepository, jwtMgr JWTManager, l *logger.Logger) *AuthUseCase {
 	return &AuthUseCase{
 		userRepo: userRepo,
 		jwtMgr:   jwtMgr,

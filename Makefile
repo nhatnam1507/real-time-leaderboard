@@ -1,4 +1,4 @@
-.PHONY: help init-dev init-ci start-dev run check lint ut stop clean
+.PHONY: help init-dev init-ci start-dev run check lint ut code-gen doc-gen stop clean
 
 # Variables
 COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
@@ -39,20 +39,24 @@ lint:
 	@golangci-lint run ./cmd/... ./internal/...
 	@echo "Linter completed successfully"
 
-## ut: Run unit tests
+## ut: Run unit tests with coverage report
 ut:
-	@echo "Running unit tests..."
-	@go test ./...
-	@echo "Unit tests completed successfully"
+	@./scripts/test.sh
 
-## openapi: Generate JSON from YAML and validate OpenAPI 3.0 specification using kin-openapi
-openapi:
+## code-gen: Generate mocks and other code
+code-gen:
+	@echo "Generating mocks..."
+	@go generate ./...
+	@echo "✓ Code generation completed"
+
+## doc-gen: Generate JSON from YAML and validate OpenAPI 3.0 specification using kin-openapi
+doc-gen:
 	@echo "Generating JSON from YAML and validating OpenAPI 3.0 specification..."
 	@go run tools/generate-openapi-json.go api/v1/openapi.yaml api/v1/openapi.json
 	@echo "✓ OpenAPI v1 specification (YAML and JSON) validated"
 
-## check: Run linter, unit tests, and workflow validation locally
-check: lint ut openapi
+## check: Run linter, code generation, unit tests, doc generation, and workflow validation locally
+check: lint code-gen ut doc-gen
 	@echo "Validating workflow syntax..."
 	@./scripts/validate-workflows.sh
 	@echo "All checks completed successfully"

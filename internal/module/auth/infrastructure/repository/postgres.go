@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"real-time-leaderboard/internal/module/auth/application"
 	"real-time-leaderboard/internal/module/auth/domain"
 
 	"github.com/google/uuid"
@@ -19,19 +20,28 @@ type PostgresUserRepository struct {
 }
 
 // NewPostgresUserRepository creates a new PostgreSQL user repository
-func NewPostgresUserRepository(pool *pgxpool.Pool) *PostgresUserRepository {
+func NewPostgresUserRepository(pool *pgxpool.Pool) application.UserRepository {
 	return &PostgresUserRepository{pool: pool}
 }
 
 // Create creates a new user
 func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) error {
-	if user.ID == "" {
-		user.ID = uuid.New().String()
+	dto := &User{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Password:  user.Password,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+
+	if dto.ID == "" {
+		dto.ID = uuid.New().String()
 	}
 	now := time.Now()
 	// Always set created_at to current time on creation (never update it afterwards)
-	user.CreatedAt = now
-	user.UpdatedAt = now
+	dto.CreatedAt = now
+	dto.UpdatedAt = now
 
 	query := `
 		INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
@@ -39,17 +49,22 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 	`
 
 	_, err := r.pool.Exec(ctx, query,
-		user.ID,
-		user.Username,
-		user.Email,
-		user.Password,
-		user.CreatedAt,
-		user.UpdatedAt,
+		dto.ID,
+		dto.Username,
+		dto.Email,
+		dto.Password,
+		dto.CreatedAt,
+		dto.UpdatedAt,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
+
+	// Update domain entity with generated values
+	user.ID = dto.ID
+	user.CreatedAt = dto.CreatedAt
+	user.UpdatedAt = dto.UpdatedAt
 
 	return nil
 }
@@ -62,14 +77,14 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 		WHERE id = $1
 	`
 
-	var user domain.User
+	var dto User
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.CreatedAt,
-		&user.UpdatedAt,
+		&dto.ID,
+		&dto.Username,
+		&dto.Email,
+		&dto.Password,
+		&dto.CreatedAt,
+		&dto.UpdatedAt,
 	)
 
 	if err != nil {
@@ -79,7 +94,14 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
-	return &user, nil
+	return &domain.User{
+		ID:        dto.ID,
+		Username:  dto.Username,
+		Email:     dto.Email,
+		Password:  dto.Password,
+		CreatedAt: dto.CreatedAt,
+		UpdatedAt: dto.UpdatedAt,
+	}, nil
 }
 
 // GetByUsername retrieves a user by username
@@ -90,14 +112,14 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 		WHERE username = $1
 	`
 
-	var user domain.User
+	var dto User
 	err := r.pool.QueryRow(ctx, query, username).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.CreatedAt,
-		&user.UpdatedAt,
+		&dto.ID,
+		&dto.Username,
+		&dto.Email,
+		&dto.Password,
+		&dto.CreatedAt,
+		&dto.UpdatedAt,
 	)
 
 	if err != nil {
@@ -107,7 +129,14 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 		return nil, fmt.Errorf("failed to get user by username: %w", err)
 	}
 
-	return &user, nil
+	return &domain.User{
+		ID:        dto.ID,
+		Username:  dto.Username,
+		Email:     dto.Email,
+		Password:  dto.Password,
+		CreatedAt: dto.CreatedAt,
+		UpdatedAt: dto.UpdatedAt,
+	}, nil
 }
 
 // GetByEmail retrieves a user by email
@@ -118,14 +147,14 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		WHERE email = $1
 	`
 
-	var user domain.User
+	var dto User
 	err := r.pool.QueryRow(ctx, query, email).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.CreatedAt,
-		&user.UpdatedAt,
+		&dto.ID,
+		&dto.Username,
+		&dto.Email,
+		&dto.Password,
+		&dto.CreatedAt,
+		&dto.UpdatedAt,
 	)
 
 	if err != nil {
@@ -135,12 +164,26 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
-	return &user, nil
+	return &domain.User{
+		ID:        dto.ID,
+		Username:  dto.Username,
+		Email:     dto.Email,
+		Password:  dto.Password,
+		CreatedAt: dto.CreatedAt,
+		UpdatedAt: dto.UpdatedAt,
+	}, nil
 }
 
 // Update updates a user
 func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) error {
-	user.UpdatedAt = time.Now()
+	dto := &User{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Password:  user.Password,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: time.Now(),
+	}
 
 	query := `
 		UPDATE users
@@ -149,16 +192,19 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) 
 	`
 
 	_, err := r.pool.Exec(ctx, query,
-		user.ID,
-		user.Username,
-		user.Email,
-		user.Password,
-		user.UpdatedAt,
+		dto.ID,
+		dto.Username,
+		dto.Email,
+		dto.Password,
+		dto.UpdatedAt,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
+
+	// Update domain entity with new timestamp
+	user.UpdatedAt = dto.UpdatedAt
 
 	return nil
 }

@@ -23,7 +23,7 @@ make init-dev
 ```
 
 This will:
-- Install all required tools (golangci-lint, migrate, air, wait4x, act)
+- Install all required tools (golangci-lint, migrate, air, wait4x, act, mockgen)
 - Configure git hooks automatically
 - Verify Docker/Docker Compose are available
 
@@ -93,12 +93,21 @@ The API is documented using OpenAPI 3.0 specification (spec-first approach):
 
 To generate JSON from YAML and validate the OpenAPI specification:
 ```bash
-make openapi
+make doc-gen
 ```
 
 This will:
 - Generate `api/v1/openapi.json` from `api/v1/openapi.yaml` (YAML is the source of truth)
 - Validate both YAML and JSON versions
+
+To generate mocks and other code:
+```bash
+make code-gen
+```
+
+This will:
+- Generate all mocks from interface definitions using `go generate ./...`
+- Mocks are generated in `internal/module/*/mocks/` directories
 
 **Note**: The OpenAPI spec is the single source of truth. All API documentation is maintained in the spec file, not in code annotations.
 
@@ -130,11 +139,14 @@ make lint
 # Run unit tests
 make ut
 
-# Run all checks (lint + unit tests + workflow validation)
+# Run all checks (lint + unit tests + code generation + doc generation + workflow validation)
 make check
 
-# Validate OpenAPI specification
-make openapi
+# Generate mocks and other code
+make code-gen
+
+# Generate and validate OpenAPI specification
+make doc-gen
 ```
 
 See [Development Guide](./docs/development.md) for complete list of commands.

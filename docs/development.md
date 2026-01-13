@@ -27,7 +27,7 @@ The project includes a simplified Makefile with essential commands for developme
 make help
 
 # Initialize development environment
-# - Installs golangci-lint, migrate tool, air, wait4x, and act (if missing)
+# - Installs golangci-lint, migrate tool, air, wait4x, act, and mockgen (if missing)
 # - Configures git hooks automatically (uses .githooks directory)
 # - Verifies Docker and Docker Compose are available
 # - Downloads Go dependencies
@@ -64,8 +64,18 @@ make lint
 # - Runs all Go unit tests
 make ut
 
+# Generate mocks and other code
+# - Generates all mocks from interface definitions using go generate
+# - Mocks are generated in internal/module/*/mocks/ directories
+make code-gen
+
+# Generate and validate OpenAPI specification
+# - Generates api/v1/openapi.json from api/v1/openapi.yaml
+# - Validates both YAML and JSON versions
+make doc-gen
+
 # Run all checks
-# - Runs linter, unit tests, and workflow validation
+# - Runs linter, unit tests, code generation, doc generation, and workflow validation
 make check
 
 # Stop the full Docker Compose stack from 'run' target
@@ -120,7 +130,7 @@ The project includes utility scripts in the `scripts/` directory:
 
 - **`init.sh`**: Development environment initialization
   - Tool-style script with two modes: `dev` and `ci`
-  - `dev` mode: Installs required tools (golangci-lint, migrate, air, wait4x, act), configures git hooks, verifies Docker/Docker Compose, downloads Go dependencies
+  - `dev` mode: Installs required tools (golangci-lint, migrate, air, wait4x, act, mockgen), configures git hooks, verifies Docker/Docker Compose, downloads Go dependencies
   - `ci` mode: Only checks Go and golangci-lint installation, downloads Go dependencies
   - Usage: `./scripts/init.sh [dev|ci]`
 
@@ -155,7 +165,9 @@ The project includes utility scripts in the `scripts/` directory:
    ```bash
    make check
    ```
-   This runs linter, unit tests, and workflow validation. A pre-push git hook automatically runs `make check` before pushing.
+   This runs linter, unit tests, code generation, doc generation, and workflow validation. A pre-push git hook automatically runs `make check` before pushing.
+   
+   **Note**: If you've changed interfaces, make sure to run `make code-gen` first to regenerate mocks, then commit the updated mocks along with your changes.
 
 5. **Stopping services**:
    ```bash
@@ -175,7 +187,27 @@ Run unit tests:
 make ut
 ```
 
-The `make check` command runs linter, unit tests, and workflow validation together.
+The `make check` command runs linter, unit tests, code generation, doc generation, and workflow validation together.
+
+### Code Generation
+
+The project uses `go generate` to generate mocks for testing. Mocks are committed to the repository and should be regenerated when interfaces change.
+
+**Generate mocks**:
+```bash
+make code-gen
+```
+
+This runs `go generate ./...` which processes all `//go:generate` directives in the codebase. Currently, mocks are generated for:
+- `UserRepository` and `JWTManager` interfaces in the auth module
+- `UserRepository`, `LeaderboardBackupRepository`, `LeaderboardRepository`, and `BroadcastService` interfaces in the leaderboard module
+
+**When to regenerate**:
+- After adding or modifying interface methods
+- After changing interface signatures
+- Before committing interface changes (mocks should be committed with code changes)
+
+**Mock location**: Mocks are generated in `internal/module/{module_name}/mocks/` directories at the module level (same level as `application/`, `domain/`, etc.).
 
 ## Git Hooks
 
@@ -277,4 +309,7 @@ The Air configuration is automatically used when running `make start-dev` or `./
 - **Validation**: go-playground/validator/v10
 - **Logging**: zerolog
 - **API Documentation**: OpenAPI 3.0 (spec-first approach)
+- **Testing**: 
+  - testify (assertions)
+  - go.uber.org/mock (mock generation)
 

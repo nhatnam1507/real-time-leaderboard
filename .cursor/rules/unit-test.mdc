@@ -1,0 +1,162 @@
+---
+alwaysApply: false
+---
+
+# Unit Testing Rules
+
+Practical rules for writing unit tests in this Clean Architecture Go project, following the **AAA pattern** (Arrange → Act → Assert).
+
+## Core Principles
+
+1. **One behavior = one test function** (use table-driven for 4+ similar cases)
+2. **Always use AAA pattern** — visually separate Arrange/Act/Assert phases
+3. **Test behavior, not implementation** — focus on business rules, not how they're implemented
+4. **Priority**: Use Cases (★★★★★) → Domain (★★★★) → Handlers (★★★) → Repositories (★★)
+
+## Test Structure
+
+### Naming Convention
+**Format**: `Test{UseCaseName}_{When}{Condition}_{Should}{ExpectedResult}`
+
+**Examples**:
+- `TestAuthUseCase_Register_WhenEmailExists_ShouldReturnConflictError`
+- `TestScoreUseCase_SubmitScore_WhenBackupFails_ShouldReturnInternalError`
+
+### AAA Pattern Template
+
+```go
+func TestAuthUseCase_Register_WhenEmailExists_ShouldReturnConflictError(t *testing.T) {
+    // ── Arrange ────────────────────────────────────────────────────────
+    ctx := context.Background()
+    ctrl := gomock.NewController(t)
+    defer ctrl.Finish()
+    
+    mockRepo := mocks.NewMockUserRepository(ctrl)
+    mockRepo.EXPECT().GetByEmail(ctx, "test@example.com").Return(&domain.User{}, nil).Times(1)
+    
+    uc := application.NewAuthUseCase(mockRepo, mockJWT, logger)
+    req := application.RegisterRequest{Email: "test@example.com"}
+
+    // ── Act ─────────────────────────────────────────────────────────────
+    _, _, err := uc.Register(ctx, req)
+
+    // ── Assert ──────────────────────────────────────────────────────────
+    require.Error(t, err)
+    var appErr *response.AppError
+    require.ErrorAs(t, err, &appErr)
+    require.Equal(t, response.CodeConflict, appErr.Code)
+}
+```
+
+## Essential Rules
+
+| Rule | Description | Severity |
+|------|-------------|----------|
+| **Arrange** | Only setup + mock expectations, no assertions | Must |
+| **Act** | Maximum 1-3 lines (usually one function call) | Must |
+| **Assert** | Use `require.*` (not `assert.*`) for fail-fast behavior | Must |
+| **Mocks** | Mock only application layer interfaces, never domain entities | Must |
+| **gomock** | Always use `defer ctrl.Finish()` to verify expectations | Must |
+| **Test files** | Keep `_test.go` files next to production code (same package) | Must |
+| **Table-driven** | Use for 4+ similar test cases | Recommended |
+| **Error assertion** | Use `ErrorAs` for `response.AppError`, `ErrorIs` for wrapped errors | Recommended |
+| **Repository tests** | Use `sqlmock` with real SQL strings | Recommended |
+| **Mock depth** | Maximum 3 levels of mocking | Should |
+
+## Mocking with gomock
+
+```go
+ctrl := gomock.NewController(t)
+defer ctrl.Finish()
+
+mockRepo := mocks.NewMockUserRepository(ctrl)
+mockRepo.EXPECT().
+    GetByID(ctx, "user-123").
+    Return(&domain.User{}, nil).
+    Times(1)
+```
+
+**Key points**:
+- Mock only interfaces (repository, service interfaces from application layer)
+- Use `.Times(1)` or `.Times(0)` to be explicit
+- Never mock domain entities (they're pure data)
+
+## Table-Driven Tests
+
+```go
+func TestAuthUseCase_Login_WhenInvalidCredentials_ShouldReturnUnauthorized(t *testing.T) {
+    tests := []struct {
+        name        string
+        setupMocks  func(*mocks.MockUserRepository)
+        req         application.LoginRequest
+        wantErrCode response.ErrorCode
+    }{
+        {
+            name: "user not found",
+            setupMocks: func(m *mocks.MockUserRepository) {
+                m.EXPECT().GetByUsername(gomock.Any(), "unknown").Return(nil, nil).Times(1)
+            },
+            req:         application.LoginRequest{Username: "unknown", Password: "pass"},
+            wantErrCode: response.CodeUnauthorized,
+        },
+        // ... more cases
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Arrange, Act, Assert
+        })
+    }
+}
+```
+
+## Testing by Layer
+
+### Domain Layer
+- **No mocks** — test pure business logic directly
+- Simple AAA pattern with direct entity testing
+
+### Application Layer (Use Cases)
+- **Mock repository/service interfaces** from application layer
+- Test happy path + all important error cases
+- Use table-driven for multiple scenarios
+
+### Infrastructure Layer (Repositories)
+- Use **sqlmock** with real SQL strings
+- Verify SQL queries and error handling
+- Test both success and error paths
+
+### Adapters Layer (Handlers)
+- **Mock use cases**, not repositories
+- Test HTTP request/response transformation
+- Keep business logic testing in use case tests
+
+## Error Assertion
+
+```go
+// For response.AppError
+var appErr *response.AppError
+require.ErrorAs(t, err, &appErr)
+require.Equal(t, response.CodeConflict, appErr.Code)
+
+// For wrapped errors
+require.ErrorIs(t, err, domain.ErrUserNotFound)
+```
+
+## Quick Decision Guide
+
+- **Pure logic (no deps)** → Simple AAA, no mocks
+- **Use case with deps** → AAA + gomock mocks
+- **Repository** → sqlmock + real SQL
+- **Handler** → Mock use case, test HTTP mapping
+- **4+ similar cases** → Table-driven tests
+
+## Best Practices
+
+1. Test one behavior per test function
+2. Use `require.*` for assertions (fail-fast)
+3. Keep tests fast (milliseconds, not seconds)
+4. Test business rules, not framework behavior
+5. Update tests when refactoring code
+6. Mock only what crosses layer boundaries
+7. Use descriptive test names that read like documentation

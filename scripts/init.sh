@@ -3,7 +3,7 @@
 # Initialize development environment
 # Usage: ./scripts/init.sh [dev|ci]
 #   dev:  Install all tools and check docker, go (default)
-#   ci:   Only check lint and go installation
+#   ci:   Install lint, gotestsum tools and check go installation
 
 set -e
 
@@ -26,7 +26,7 @@ show_usage() {
     echo ""
     echo "Modes:"
     echo "  dev  Install all tools and check docker, go (default)"
-    echo "  ci   Only check lint and go installation"
+    echo "  ci   Install lint, gotestsum tools and check go installation"
     exit 1
 }
 
@@ -138,6 +138,40 @@ install_act() {
     echo "✓ act installed"
 }
 
+# Function to check mockgen
+check_mockgen() {
+    if ! command_exists mockgen; then
+        echo "Error: mockgen is not installed."
+        return 1
+    fi
+    echo "✓ mockgen is installed"
+    return 0
+}
+
+# Function to install mockgen
+install_mockgen() {
+    echo "Installing mockgen..."
+    go install go.uber.org/mock/mockgen@latest > /dev/null 2>&1
+    echo "✓ mockgen installed"
+}
+
+# Function to check gotestsum
+check_gotestsum() {
+    if ! command_exists gotestsum; then
+        echo "Error: gotestsum is not installed."
+        return 1
+    fi
+    echo "✓ gotestsum is installed"
+    return 0
+}
+
+# Function to install gotestsum
+install_gotestsum() {
+    echo "Installing gotestsum..."
+    go install gotest.tools/gotestsum@latest > /dev/null 2>&1
+    echo "✓ gotestsum installed"
+}
+
 # Function to check docker
 check_docker() {
     if ! command_exists docker; then
@@ -219,6 +253,16 @@ init_dev() {
         install_act
         TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
     fi
+    
+    if ! check_mockgen; then
+        install_mockgen
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+    
+    if ! check_gotestsum; then
+        install_gotestsum
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
     echo ""
     
     # Check Docker
@@ -258,6 +302,11 @@ init_ci() {
     # Check and install golangci-lint if needed
     if ! check_golangci_lint; then
         install_golangci_lint
+    fi
+    
+    # Check and install gotestsum if needed (for test reports in CI)
+    if ! check_gotestsum; then
+        install_gotestsum
     fi
     echo ""
     
