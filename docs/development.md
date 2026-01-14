@@ -7,6 +7,8 @@
 3. **Adapters Layer**: Handles HTTP/WebSocket, works with domain entities directly
 4. **Infrastructure Layer**: Implements repository interfaces, handles external services
 
+For detailed architecture and layer structure, see [Architecture](./architecture.md).
+
 ## Adding a New Module
 
 1. Create module directory: `internal/module/{module_name}/`
