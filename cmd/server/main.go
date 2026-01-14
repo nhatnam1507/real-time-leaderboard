@@ -250,6 +250,10 @@ func setupSPARouter(router *gin.Engine) {
 		c.Data(http.StatusOK, "application/javascript", spa.AppJS)
 	})
 
+	router.GET("/js/token-utils.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.TokenUtilsJS)
+	})
+
 	// Catch-all: serve SPA index.html for all routes (including root)
 	// The SPA will handle showing 404 pages for invalid routes
 	// This is the standard pattern for SPAs - NoRoute handles everything not matched by /api or /docs

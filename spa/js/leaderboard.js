@@ -5,7 +5,7 @@ class LeaderboardManager {
         this.isConnected = false;
     }
 
-    connect(limit = 100) {
+    connect(limit = 10) {
         if (this.eventSource) {
             this.disconnect();
         }
@@ -111,34 +111,40 @@ class LeaderboardManager {
 
     createLeaderboardRow(entry, index) {
         const row = document.createElement('tr');
-        row.className = 'border-b border-slate-100 hover:bg-slate-50 transition-colors duration-150';
+        row.className = 'leaderboard-row border-b border-purple-500/20';
 
         // Rank cell
         const rankCell = document.createElement('td');
-        rankCell.className = 'py-4 px-4 text-sm font-semibold text-slate-700';
+        rankCell.className = 'py-4 px-4';
         
-        // Add medal emoji for top 3
         const rank = entry.rank || (index + 1);
-        let rankText = String(rank);
+        
+        // Create rank badge
+        const rankBadge = document.createElement('div');
+        rankBadge.className = 'rank-badge';
+        
+        // Add special styling for top 3
         if (rank === 1) {
-            rankText = '🥇 ' + rankText;
+            rankBadge.classList.add('top-1');
         } else if (rank === 2) {
-            rankText = '🥈 ' + rankText;
+            rankBadge.classList.add('top-2');
         } else if (rank === 3) {
-            rankText = '🥉 ' + rankText;
+            rankBadge.classList.add('top-3');
         }
-        rankCell.textContent = rankText;
+        
+        rankBadge.textContent = rank;
+        rankCell.appendChild(rankBadge);
         row.appendChild(rankCell);
 
         // Username cell
         const usernameCell = document.createElement('td');
-        usernameCell.className = 'py-4 px-4 text-sm text-slate-900';
+        usernameCell.className = 'py-4 px-4 text-sm text-slate-200 font-medium';
         usernameCell.textContent = entry.username || 'Unknown';
         row.appendChild(usernameCell);
 
         // Score cell
         const scoreCell = document.createElement('td');
-        scoreCell.className = 'py-4 px-4 text-sm font-semibold text-slate-900 text-right';
+        scoreCell.className = 'py-4 px-4 text-sm font-bold text-purple-300 text-right';
         scoreCell.textContent = entry.score?.toLocaleString() || '0';
         row.appendChild(scoreCell);
 

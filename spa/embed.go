@@ -19,3 +19,6 @@ var LeaderboardJS []byte
 
 //go:embed js/app.js
 var AppJS []byte
+
+//go:embed js/token-utils.js
+var TokenUtilsJS []byte

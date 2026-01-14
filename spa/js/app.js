@@ -1,16 +1,25 @@
 // Main application logic
 class App {
     constructor() {
-        this.validRoutes = ['/', '/login', '/register'];
+        this.validRoutes = ['/', '/login', '/register', '/profile'];
         this.init();
     }
 
     init() {
-        // Ensure initial state - hide auth container by default, show leaderboard
+        // Ensure initial state - hide auth and profile containers by default
         const authContainer = document.getElementById('auth-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
+        const profileContainer = document.getElementById('profile-container');
+        const notFoundContainer = document.getElementById('not-found-container');
+        
         if (authContainer && !authContainer.classList.contains('hidden')) {
             authContainer.classList.add('hidden');
+        }
+        if (profileContainer && !profileContainer.classList.contains('hidden')) {
+            profileContainer.classList.add('hidden');
+        }
+        if (notFoundContainer && !notFoundContainer.classList.contains('hidden')) {
+            notFoundContainer.classList.add('hidden');
         }
         if (leaderboardContainer && leaderboardContainer.classList.contains('hidden')) {
             leaderboardContainer.classList.remove('hidden');
@@ -23,6 +32,38 @@ class App {
         const scoreForm = document.getElementById('score-form');
         if (scoreForm) {
             scoreForm.addEventListener('submit', (e) => this.handleScoreSubmit(e));
+        }
+
+        // Setup profile score submission form
+        const profileScoreForm = document.getElementById('profile-score-form');
+        if (profileScoreForm) {
+            profileScoreForm.addEventListener('submit', (e) => this.handleProfileScoreSubmit(e));
+        }
+
+        // Setup profile back button
+        const profileBackBtn = document.getElementById('profile-back-btn');
+        if (profileBackBtn) {
+            profileBackBtn.addEventListener('click', () => {
+                window.history.pushState({}, '', '/');
+                this.handleRoute();
+            });
+        }
+
+        // Setup auth back to leaderboard buttons
+        const authBackBtn = document.getElementById('auth-back-to-leaderboard');
+        if (authBackBtn) {
+            authBackBtn.addEventListener('click', () => {
+                window.history.pushState({}, '', '/');
+                this.handleRoute();
+            });
+        }
+
+        const authBackBtnRegister = document.getElementById('auth-back-to-leaderboard-register');
+        if (authBackBtnRegister) {
+            authBackBtnRegister.addEventListener('click', () => {
+                window.history.pushState({}, '', '/');
+                this.handleRoute();
+            });
         }
 
         // Setup login prompt button
@@ -39,8 +80,12 @@ class App {
         // Setup user dropdown menu
         this.setupUserDropdown();
 
+        // Setup leaderboard limit selector
+        this.setupLeaderboardLimit();
+
         // Start leaderboard connection immediately (leaderboard is always visible)
-        leaderboardManager.connect(100);
+        const savedLimit = this.getLeaderboardLimit();
+        leaderboardManager.connect(savedLimit);
 
         // Setup 404 page button
         const goHomeBtn = document.getElementById('go-home-btn');
@@ -91,6 +136,16 @@ class App {
             this.showLogin();
         } else if (path === '/register') {
             this.showRegister();
+        } else if (path === '/profile') {
+            // Check if user is authenticated
+            const isAuthenticated = !!localStorage.getItem('accessToken');
+            if (!isAuthenticated) {
+                // Redirect to login if not authenticated
+                window.history.pushState({}, '', '/login');
+                this.handleRoute();
+                return;
+            }
+            this.showProfile();
         } else {
             // Invalid route - show 404
             this.show404();
@@ -101,22 +156,26 @@ class App {
         const authContainer = document.getElementById('auth-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
         const notFoundContainer = document.getElementById('not-found-container');
+        const profileContainer = document.getElementById('profile-container');
         
         if (authContainer) authContainer.classList.add('hidden');
         if (leaderboardContainer) leaderboardContainer.classList.add('hidden');
         if (notFoundContainer) notFoundContainer.classList.remove('hidden');
+        if (profileContainer) profileContainer.classList.add('hidden');
     }
 
     showLogin() {
         const authContainer = document.getElementById('auth-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
         const notFoundContainer = document.getElementById('not-found-container');
+        const profileContainer = document.getElementById('profile-container');
         const loginForm = document.getElementById('login-form');
         const registerForm = document.getElementById('register-form');
         
         if (authContainer) authContainer.classList.remove('hidden');
         if (leaderboardContainer) leaderboardContainer.classList.add('hidden');
         if (notFoundContainer) notFoundContainer.classList.add('hidden');
+        if (profileContainer) profileContainer.classList.add('hidden');
         if (loginForm) loginForm.classList.remove('hidden');
         if (registerForm) registerForm.classList.add('hidden');
         
@@ -137,12 +196,14 @@ class App {
         const authContainer = document.getElementById('auth-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
         const notFoundContainer = document.getElementById('not-found-container');
+        const profileContainer = document.getElementById('profile-container');
         const loginForm = document.getElementById('login-form');
         const registerForm = document.getElementById('register-form');
         
         if (authContainer) authContainer.classList.remove('hidden');
         if (leaderboardContainer) leaderboardContainer.classList.add('hidden');
         if (notFoundContainer) notFoundContainer.classList.add('hidden');
+        if (profileContainer) profileContainer.classList.add('hidden');
         if (loginForm) loginForm.classList.add('hidden');
         if (registerForm) registerForm.classList.remove('hidden');
         
@@ -157,10 +218,12 @@ class App {
         const authContainer = document.getElementById('auth-container');
         const leaderboardContainer = document.getElementById('leaderboard-container');
         const notFoundContainer = document.getElementById('not-found-container');
+        const profileContainer = document.getElementById('profile-container');
         
         if (authContainer) authContainer.classList.add('hidden');
         if (leaderboardContainer) leaderboardContainer.classList.remove('hidden');
         if (notFoundContainer) notFoundContainer.classList.add('hidden');
+        if (profileContainer) profileContainer.classList.add('hidden');
         
         // Update UI immediately
         this.updateAuthUI();
@@ -173,6 +236,163 @@ class App {
                 this.updateAuthUI();
             }, 100);
         });
+    }
+
+    async showProfile() {
+        const authContainer = document.getElementById('auth-container');
+        const leaderboardContainer = document.getElementById('leaderboard-container');
+        const notFoundContainer = document.getElementById('not-found-container');
+        const profileContainer = document.getElementById('profile-container');
+        
+        if (authContainer) authContainer.classList.add('hidden');
+        if (leaderboardContainer) leaderboardContainer.classList.add('hidden');
+        if (notFoundContainer) notFoundContainer.classList.add('hidden');
+        if (profileContainer) profileContainer.classList.remove('hidden');
+        
+        // Load profile data
+        await this.loadProfileData();
+    }
+
+    async loadProfileData() {
+        const currentUser = authManager.getCurrentUser();
+        if (!currentUser) {
+            return;
+        }
+
+        // Update profile info
+        const profileAvatarText = document.getElementById('profile-avatar-text');
+        const profileUsername = document.getElementById('profile-username');
+        const profileEmail = document.getElementById('profile-email');
+        
+        if (profileAvatarText && currentUser.username) {
+            profileAvatarText.textContent = currentUser.username.charAt(0).toUpperCase();
+        }
+        if (profileUsername) {
+            profileUsername.textContent = currentUser.username || '-';
+        }
+        if (profileEmail) {
+            profileEmail.textContent = currentUser.email || '-';
+        }
+
+        // Fetch user's current rank and score from leaderboard via SSE
+        try {
+            // Create a temporary EventSource to get leaderboard data
+            const leaderboardData = await this.fetchLeaderboardData();
+            
+            if (leaderboardData && leaderboardData.entries) {
+                const entries = leaderboardData.entries;
+                // Find user entry by matching user_id
+                const userEntry = entries.find(entry => entry.user_id === currentUser.id);
+                
+                const profileRank = document.getElementById('profile-rank');
+                const profileScore = document.getElementById('profile-score');
+                const profileTotalPlayers = document.getElementById('profile-total-players');
+                
+                if (userEntry) {
+                    if (profileRank) {
+                        profileRank.textContent = userEntry.rank || '-';
+                    }
+                    if (profileScore) {
+                        profileScore.textContent = userEntry.score?.toLocaleString() || '0';
+                    }
+                } else {
+                    // User not in top players, show defaults
+                    if (profileRank) profileRank.textContent = '-';
+                    if (profileScore) profileScore.textContent = '0';
+                }
+                
+                if (profileTotalPlayers) {
+                    profileTotalPlayers.textContent = leaderboardData.total || entries.length;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load profile data:', error);
+            // Set defaults
+            const profileRank = document.getElementById('profile-rank');
+            const profileScore = document.getElementById('profile-score');
+            const profileTotalPlayers = document.getElementById('profile-total-players');
+            
+            if (profileRank) profileRank.textContent = '-';
+            if (profileScore) profileScore.textContent = '0';
+            if (profileTotalPlayers) profileTotalPlayers.textContent = '-';
+        }
+    }
+
+    fetchLeaderboardData() {
+        return new Promise((resolve, reject) => {
+            const eventSource = new EventSource('/api/v1/leaderboard/stream?limit=100');
+            const timeout = setTimeout(() => {
+                eventSource.close();
+                reject(new Error('Timeout fetching leaderboard data'));
+            }, 5000);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.success && data.data) {
+                        clearTimeout(timeout);
+                        eventSource.close();
+                        resolve(data.data);
+                    }
+                } catch (error) {
+                    clearTimeout(timeout);
+                    eventSource.close();
+                    reject(error);
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                clearTimeout(timeout);
+                eventSource.close();
+                reject(error);
+            };
+        });
+    }
+
+    async handleProfileScoreSubmit(e) {
+        e.preventDefault();
+        
+        const scoreInput = document.getElementById('profile-score-input');
+        const score = parseInt(scoreInput.value, 10);
+        const errorDiv = document.getElementById('profile-score-error');
+        const successDiv = document.getElementById('profile-score-success');
+
+        // Clear previous messages
+        errorDiv.classList.add('hidden');
+        successDiv.classList.add('hidden');
+        errorDiv.textContent = '';
+        successDiv.textContent = '';
+
+        if (isNaN(score) || score < 0) {
+            errorDiv.textContent = 'Please enter a valid score (0 or greater)';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        try {
+            const response = await api.submitScore(score);
+            
+            if (response.success) {
+                successDiv.textContent = `Score updated successfully! Your new score is ${response.data?.score || score}.`;
+                successDiv.classList.remove('hidden');
+                
+                // Clear input
+                scoreInput.value = '';
+                
+                // Reload profile data to update rank and score
+                await this.loadProfileData();
+                
+                // Hide success message after 3 seconds
+                setTimeout(() => {
+                    successDiv.classList.add('hidden');
+                }, 3000);
+            } else {
+                throw new Error(response.message || 'Failed to update score');
+            }
+        } catch (error) {
+            errorDiv.textContent = error.message || 'Failed to update score. Please try again.';
+            errorDiv.classList.remove('hidden');
+        }
     }
 
     updateAuthUI() {
@@ -315,34 +535,15 @@ class App {
             }
         });
 
-        // Profile link - scroll to top (profile section could be added later)
+        // Profile link - navigate to profile page
         if (profileLink) {
             profileLink.addEventListener('click', (e) => {
                 e.preventDefault();
                 if (userDropdownMenu) {
                     userDropdownMenu.classList.add('hidden');
                 }
-                // For now, just scroll to top. Can be extended to show profile modal/page
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            });
-        }
-
-        // Update Score link - scroll to score submission form
-        if (updateScoreLink) {
-            updateScoreLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (userDropdownMenu) {
-                    userDropdownMenu.classList.add('hidden');
-                }
-                const scoreForm = document.getElementById('score-form');
-                if (scoreForm) {
-                    scoreForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    // Focus on score input
-                    const scoreInput = document.getElementById('score-input');
-                    if (scoreInput) {
-                        setTimeout(() => scoreInput.focus(), 300);
-                    }
-                }
+                window.history.pushState({}, '', '/profile');
+                this.handleRoute();
             });
         }
 
@@ -358,6 +559,47 @@ class App {
                 }
             });
         }
+    }
+
+    setupLeaderboardLimit() {
+        const limitSelector = document.getElementById('leaderboard-limit');
+        if (!limitSelector) {
+            return;
+        }
+
+        // Load saved limit from localStorage
+        const savedLimit = this.getLeaderboardLimit();
+        limitSelector.value = savedLimit;
+
+        // Handle limit changes
+        limitSelector.addEventListener('change', (e) => {
+            const newLimit = parseInt(e.target.value, 10);
+            if (!isNaN(newLimit) && newLimit > 0) {
+                // Save to localStorage
+                this.setLeaderboardLimit(newLimit);
+                
+                // Reconnect leaderboard with new limit
+                leaderboardManager.disconnect();
+                leaderboardManager.connect(newLimit);
+            }
+        });
+    }
+
+    getLeaderboardLimit() {
+        const saved = localStorage.getItem('leaderboardLimit');
+        if (saved) {
+            const limit = parseInt(saved, 10);
+            // Valid options: 5, 10, 50, 100
+            const validLimits = [5, 10, 50, 100];
+            if (!isNaN(limit) && limit > 0 && validLimits.includes(limit)) {
+                return limit;
+            }
+        }
+        return 10; // Default limit
+    }
+
+    setLeaderboardLimit(limit) {
+        localStorage.setItem('leaderboardLimit', String(limit));
     }
 
     async handleScoreSubmit(e) {
