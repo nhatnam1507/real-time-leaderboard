@@ -25,7 +25,10 @@ Users can register, login, and manage their authentication sessions using JWT to
 - Register new account with username, email, and password
 - Login with credentials to receive authentication tokens
 - Refresh access tokens to extend sessions
+- Get current user information via authenticated endpoint
 - Secure password storage with hashing
+- Automatic token expiration checking and proactive refresh
+- Token validation on all protected endpoints
 
 ### Score Management
 
@@ -102,6 +105,34 @@ sequenceDiagram
 3. Password is verified
 4. If valid, authentication tokens are generated and returned
 5. If invalid, authentication error is returned
+
+### Token Management Flow
+
+The system implements JWT-based authentication with automatic token management:
+
+**Token Types**:
+- **Access Token**: Short-lived token for API authentication (validated on every request)
+- **Refresh Token**: Long-lived token for obtaining new access tokens
+
+**Token Management Features**:
+- **Proactive Refresh**: Tokens are automatically refreshed before expiration (configurable buffer time, default: 5 minutes)
+- **Expiration Checking**: Token expiration is checked before making API requests
+- **Automatic Retry**: Failed requests due to expired tokens are automatically retried after refresh
+- **Secure Storage**: Tokens are stored securely in browser localStorage (SPA)
+- **User Info Management**: User information is stored separately from tokens (no client-side JWT decoding)
+
+**Current User Endpoint**:
+- `GET /api/v1/auth/me` - Returns current authenticated user's information
+- Requires valid JWT token in Authorization header
+- Provides single source of truth for user information
+- Used by SPA to fetch user info without decoding JWT tokens
+
+**SPA Authentication Best Practices**:
+- No client-side JWT decoding for user data extraction
+- User information retrieved from API endpoints only
+- Automatic token refresh prevents failed requests
+- Proper error handling for authentication failures
+- Token validation on all protected endpoints
 
 ### Score Update Flow
 

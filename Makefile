@@ -1,4 +1,4 @@
-.PHONY: help init-dev init-ci start-dev run check lint ut code-gen doc-gen stop clean
+.PHONY: help init-dev init-ci build start-dev run check lint ut code-gen doc-gen stop clean
 
 # Variables
 COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
@@ -25,12 +25,18 @@ init-dev:
 init-ci:
 	@./scripts/init.sh ci
 
+## build: Rebuild the docker container for the application
+build:
+	@echo "Rebuilding docker container..."
+	@docker compose -f $(COMPOSE_FULL_FILE) build
+	@echo "✓ Docker container rebuilt"
+
 ## start-dev: Start compose deps file and start the application with air in local VM. Uses migrate script with db url pointing to localhost
 start-dev: init-dev
 	@./scripts/run.sh dev
 
 ## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to localhost
-run: init-dev
+run: init-dev build
 	@./scripts/run.sh all
 
 ## lint: Run linter (golangci-lint)

@@ -69,6 +69,7 @@ This will:
 - Wait for services to be ready using wait4x
 - Run database migrations (idempotent)
 - Start the application in a container
+- Rebuild the application image (via `make build`) before starting
 
 The server will start on `http://localhost:8080`
 
@@ -119,6 +120,9 @@ make help
 
 # Initialize development environment (install tools)
 make init-dev
+
+# Rebuild the application Docker image
+make build
 
 # Start development environment (deps + app with hot reload)
 make start-dev

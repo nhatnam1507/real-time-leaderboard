@@ -25,6 +25,7 @@ import (
 	"real-time-leaderboard/internal/shared/middleware"
 	redisInfra "real-time-leaderboard/internal/shared/redis"
 	"real-time-leaderboard/internal/shared/response"
+	"real-time-leaderboard/spa"
 
 	"github.com/gin-gonic/gin"
 )
@@ -154,10 +155,8 @@ func setupRouter(
 	// Setup docs router (without middleware, prefixed by /docs)
 	setupDocsRouter(router)
 
-	// 404 Not Found handler for routes outside /api and /docs
-	router.NoRoute(func(c *gin.Context) {
-		response.ErrorWithStatus(c, http.StatusNotFound, response.CodeNotFound, "Route not found")
-	})
+	// Setup SPA router - handles all SPA routes and catch-all for client-side routing
+	setupSPARouter(router)
 
 	return router
 }
@@ -198,7 +197,7 @@ func setupAPIRouter(
 		})
 
 		// Auth routes (no auth required)
-		authHandler.RegisterRoutes(v1PublicGroup)
+		authHandler.RegisterPublicRoutes(v1PublicGroup)
 
 		// Public leaderboard routes (no auth required)
 		leaderboardHandler.RegisterPublicRoutes(v1PublicGroup)
@@ -209,6 +208,9 @@ func setupAPIRouter(
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
+		// Protected auth routes (auth required)
+		authHandler.RegisterProtectedRoutes(v1ProtectedGroup)
+
 		// Protected leaderboard routes (auth required)
 		leaderboardHandler.RegisterProtectedRoutes(v1ProtectedGroup)
 	}
@@ -227,4 +229,35 @@ func setupDocsRouter(router *gin.Engine) {
 			c.Data(http.StatusOK, "text/html", api.SwaggerUIHTML)
 		})
 	}
+}
+
+func setupSPARouter(router *gin.Engine) {
+	// SPA static files - using embedded files
+	// Serve JavaScript files at /js/*
+	router.GET("/js/api.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.APIJS)
+	})
+
+	router.GET("/js/auth.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.AuthJS)
+	})
+
+	router.GET("/js/leaderboard.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.LeaderboardJS)
+	})
+
+	router.GET("/js/app.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.AppJS)
+	})
+
+	router.GET("/js/token-utils.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/javascript", spa.TokenUtilsJS)
+	})
+
+	// Catch-all: serve SPA index.html for all routes (including root)
+	// The SPA will handle showing 404 pages for invalid routes
+	// This is the standard pattern for SPAs - NoRoute handles everything not matched by /api or /docs
+	router.NoRoute(func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html", spa.IndexHTML)
+	})
 }

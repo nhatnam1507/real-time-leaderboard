@@ -8,14 +8,17 @@ The system is organized into self-contained modules, each following Clean Archit
 
 **Components**:
 - **Domain**: User entity
-- **Application**: UserRepository interface, RegisterUseCase, LoginUseCase, ValidateTokenUseCase, RefreshTokenUseCase
-- **Adapters**: HTTP handlers for registration, login, token refresh
+- **Application**: UserRepository interface, RegisterUseCase, LoginUseCase, ValidateTokenUseCase, RefreshTokenUseCase, GetCurrentUserUseCase
+- **Adapters**: HTTP handlers for registration, login, token refresh, and current user info
+  - `RegisterPublicRoutes()` - Registers public routes (register, login, refresh)
+  - `RegisterProtectedRoutes()` - Registers protected routes (get current user)
 - **Infrastructure**: PostgreSQL UserRepository, JWT token manager
 
 **Endpoints**:
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/register` - User registration (public)
+- `POST /api/v1/auth/login` - User login (public)
+- `POST /api/v1/auth/refresh` - Refresh access token (public)
+- `GET /api/v1/auth/me` - Get current user information (protected, requires authentication)
 
 ## Leaderboard Module
 
