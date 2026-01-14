@@ -26,7 +26,7 @@
 </head>
 <body class="bg-slate-50 text-slate-900">
     <!-- Auth Pages (Login/Register) -->
-    <div id="auth-container" class="min-h-screen flex items-center justify-center px-4 py-12">
+    <div id="auth-container" class="hidden min-h-screen flex items-center justify-center px-4 py-12">
         <!-- Login Form -->
         <div id="login-form" class="w-full max-w-md">
             <div class="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
@@ -135,8 +135,8 @@
         </div>
     </div>
 
-    <!-- Dashboard (Hidden by default) -->
-    <div id="dashboard-container" class="hidden min-h-screen">
+    <!-- Leaderboard Page (Default, visible to all) -->
+    <div id="leaderboard-container" class="min-h-screen">
         <!-- Header -->
         <header class="bg-white border-b border-slate-200 shadow-sm">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -147,13 +147,87 @@
                             <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                             <span class="text-sm text-slate-600">Live</span>
                         </div>
-                        <div id="user-info" class="text-sm text-slate-600"></div>
-                        <button 
-                            id="logout-btn"
-                            class="text-sm text-slate-600 hover:text-slate-900 cursor-pointer transition-colors duration-200 font-medium"
-                        >
-                            Logout
-                        </button>
+                        <div id="user-info-container" class="relative">
+                            <!-- Sign In Button (always hidden - score-submission-prompt has sign-in button) -->
+                            <button 
+                                id="login-header-btn"
+                                class="hidden text-sm text-blue-600 hover:text-blue-700 cursor-pointer transition-colors duration-200 font-medium"
+                            >
+                                Sign In
+                            </button>
+                            
+                            <!-- User Dropdown Menu (shown when logged in) -->
+                            <div id="user-dropdown" class="hidden relative">
+                                <button 
+                                    id="user-menu-button"
+                                    class="flex items-center gap-2 text-sm text-slate-700 hover:text-slate-900 cursor-pointer transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg px-2 py-1"
+                                    aria-expanded="false"
+                                    aria-haspopup="true"
+                                >
+                                    <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-sm" id="user-avatar">
+                                        <span id="user-avatar-text"></span>
+                                    </div>
+                                    <span id="user-name" class="font-medium"></span>
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <!-- Dropdown Menu -->
+                                <div 
+                                    id="user-dropdown-menu"
+                                    class="hidden absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                                    role="menu"
+                                    aria-orientation="vertical"
+                                >
+                                    <div class="py-1">
+                                        <!-- User Info Section -->
+                                        <div class="px-4 py-3 border-b border-slate-200">
+                                            <p class="text-sm font-semibold text-slate-900" id="dropdown-user-name"></p>
+                                            <p class="text-xs text-slate-500 mt-1" id="dropdown-user-email"></p>
+                                        </div>
+                                        
+                                        <!-- Profile Link -->
+                                        <a 
+                                            href="#"
+                                            id="profile-link"
+                                            class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors duration-150"
+                                            role="menuitem"
+                                        >
+                                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                            </svg>
+                                            <span>Profile</span>
+                                        </a>
+                                        
+                                        <!-- Update Score Link -->
+                                        <a 
+                                            href="#"
+                                            id="update-score-link"
+                                            class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors duration-150"
+                                            role="menuitem"
+                                        >
+                                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                            </svg>
+                                            <span>Update Score</span>
+                                        </a>
+                                        
+                                        <!-- Logout Button -->
+                                        <button 
+                                            id="logout-btn"
+                                            class="flex items-center gap-3 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors duration-150 text-left"
+                                            role="menuitem"
+                                        >
+                                            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                            </svg>
+                                            <span>Log out</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,8 +235,8 @@
 
         <!-- Main Content -->
         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <!-- Score Submission Card -->
-            <div class="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-slate-200">
+            <!-- Score Submission Card (Only visible when authenticated) -->
+            <div id="score-submission-card" class="hidden bg-white rounded-2xl shadow-lg p-6 mb-8 border border-slate-200">
                 <h2 class="text-xl font-semibold mb-4 text-slate-900">Update Your Score</h2>
                 <form id="score-form" class="flex flex-col sm:flex-row gap-4">
                     <div class="flex-1">
@@ -187,6 +261,22 @@
                 </form>
                 <div id="score-error" class="hidden mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200"></div>
                 <div id="score-success" class="hidden mt-4 text-sm text-green-600 bg-green-50 p-3 rounded-lg border border-green-200"></div>
+            </div>
+
+            <!-- Score Submission Prompt (Only visible when NOT authenticated) -->
+            <div id="score-submission-prompt" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl shadow-lg p-6 mb-8 border border-blue-200">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-semibold mb-2 text-slate-900">Want to submit your score?</h2>
+                        <p class="text-slate-600">Sign in to compete on the leaderboard</p>
+                    </div>
+                    <button 
+                        id="submit-score-btn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap"
+                    >
+                        Sign In to Submit Score
+                    </button>
+                </div>
             </div>
 
             <!-- Leaderboard Card -->
@@ -243,6 +333,7 @@
         </div>
     </div>
 
+    <script src="/js/token-utils.js"></script>
     <script src="/js/api.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/leaderboard.js"></script>

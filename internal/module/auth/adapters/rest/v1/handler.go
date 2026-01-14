@@ -3,6 +3,7 @@ package v1
 
 import (
 	"real-time-leaderboard/internal/module/auth/application"
+	"real-time-leaderboard/internal/shared/middleware"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
 
@@ -96,12 +97,37 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	response.Success(c, gin.H{"token": tokenPair}, "Token refreshed successfully")
 }
 
-// RegisterRoutes registers auth routes
-func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
+// GetCurrentUser returns the current authenticated user's information
+func (h *Handler) GetCurrentUser(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
+		return
+	}
+
+	user, err := h.authUseCase.GetCurrentUser(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, user, "User retrieved successfully")
+}
+
+// RegisterPublicRoutes registers public auth routes (no auth required)
+func (h *Handler) RegisterPublicRoutes(router *gin.RouterGroup) {
 	auth := router.Group("/auth")
 	{
 		auth.POST("/register", h.Register)
 		auth.POST("/login", h.Login)
 		auth.POST("/refresh", h.RefreshToken)
+	}
+}
+
+// RegisterProtectedRoutes registers protected auth routes (requires authentication)
+func (h *Handler) RegisterProtectedRoutes(router *gin.RouterGroup) {
+	auth := router.Group("/auth")
+	{
+		auth.GET("/me", h.GetCurrentUser)
 	}
 }

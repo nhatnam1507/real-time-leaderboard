@@ -197,7 +197,7 @@ func setupAPIRouter(
 		})
 
 		// Auth routes (no auth required)
-		authHandler.RegisterRoutes(v1PublicGroup)
+		authHandler.RegisterPublicRoutes(v1PublicGroup)
 
 		// Public leaderboard routes (no auth required)
 		leaderboardHandler.RegisterPublicRoutes(v1PublicGroup)
@@ -208,6 +208,9 @@ func setupAPIRouter(
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
+		// Protected auth routes (auth required)
+		authHandler.RegisterProtectedRoutes(v1ProtectedGroup)
+
 		// Protected leaderboard routes (auth required)
 		leaderboardHandler.RegisterProtectedRoutes(v1ProtectedGroup)
 	}

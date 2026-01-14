@@ -174,3 +174,17 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 
 	return tokenPair, nil
 }
+
+// GetCurrentUser retrieves the current user by ID
+func (uc *AuthUseCase) GetCurrentUser(ctx context.Context, userID string) (*domain.User, error) {
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		uc.logger.Errorf(ctx, "Failed to get user: %v", err)
+		return nil, response.NewInternalError("Failed to get user", err)
+	}
+	if user == nil {
+		return nil, response.NewUnauthorizedError("User not found")
+	}
+
+	return user, nil
+}
