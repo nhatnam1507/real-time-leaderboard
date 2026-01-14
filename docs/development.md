@@ -48,13 +48,15 @@ make init-ci
 make start-dev
 # Or directly: ./scripts/run.sh dev
 
-# Run full Docker Compose setup
-# - Starts all services (PostgreSQL, Redis, Application) in containers
-# - Waits for services to be ready using wait4x (checks actual service health)
-# - Runs database migrations (idempotent - safe to run multiple times)
-# - Application runs in Docker container
+# Run full Docker Swarm stack
+# - Initializes Docker Swarm (if not already initialized)
+# - Deploys full stack (PostgreSQL, Redis, Application) to Docker Swarm
+# - Waits for swarm services to be ready using wait4x (checks actual service health)
+# - Runs database migrations (idempotent - safe to run multiple times) against swarm postgres
+# - Application runs in Docker Swarm service
+# - Completely separate from dev mode (different networks and volumes)
 make run
-# Or directly: ./scripts/run.sh all
+# Or directly: ./scripts/run.sh prod-like
 
 # Rebuild the application Docker image
 make build
@@ -81,14 +83,15 @@ make doc-gen
 # - Runs linter, unit tests, code generation, doc generation, and workflow validation
 make check
 
-# Stop the full Docker Compose stack from 'run' target
-# - Stops and removes all containers from the full compose file
+# Stop the Docker Swarm stack from 'run' target
+# - Stops and removes all services from the Swarm stack
 # - Preserves volumes (data is kept)
 # - Use this after running 'make run'
 make stop
 
-# Remove all Docker Compose stacks, volumes, and related files
-# - Stops and removes all containers from both compose files
+# Remove all Docker Swarm stacks, compose stacks, volumes, and related files
+# - Stops and removes all services from Swarm stack
+# - Stops and removes all containers from dev compose file
 # - Removes all volumes (data will be lost)
 # - Cleans up build artifacts (tmp/ directory)
 make clean
@@ -96,21 +99,28 @@ make clean
 
 ### Docker Compose Files
 
-The Docker setup is modularized for better organization:
+The Docker setup is modularized for better organization with complete separation between dev and prod-like modes:
 
-- **`docker/docker-compose.deps.yml`**: Contains only dependency services (PostgreSQL, Redis)
-  - Services are reused between `dev` and `all` modes to avoid conflicts
+- **`docker/docker-compose.dev.yml`**: Contains only dependency services (PostgreSQL, Redis) for development
+  - Used in `dev` mode to run dependencies while app runs locally with air
+  - Uses `leaderboard_dev` network and `leaderboard_dev_*` volumes
   - Containers are only started if they don't already exist
   - Stack name: `leaderboard` (defined in compose file)
-- **`docker/docker-compose.yml`**: Full compose file that includes deps and adds the application service
-  - Uses Docker Compose `include` feature to include the deps file
-  - App container uses service names (postgres/redis) from docker network
-  - Stack name: `leaderboard` (defined in compose file)
-  - Can be used for production deployments
+- **`docker/docker-compose.swarm.yml`**: Full stack configuration for Docker Swarm (production-like mode)
+  - Contains all services (PostgreSQL, Redis, Application) configured for Swarm
+  - Uses `leaderboard_prod` network and `leaderboard_prod_*` volumes
+  - App service uses service names (postgres/redis) from Swarm network
+  - Stack name: `leaderboard` (deployed via `docker stack deploy`)
+  - Used for production-like deployments with Docker Swarm
+
+**Complete Separation**:
+- Dev and prod-like modes are completely independent - no cross-checking or interference
+- Each mode uses separate networks and volumes to avoid conflicts
+- Both modes can run simultaneously (though they will conflict on ports 5432/6379 if both are running)
 
 **Stopping Services**:
 - In `dev` mode: Press Ctrl+C to stop the application and automatically cleanup dependency services
-- In `all` mode (after `make run`): Use `make stop` to stop the full stack (preserves data) or `make clean` to remove everything
+- In `prod-like` mode (after `make run`): Use `make stop` to stop the Swarm stack (preserves data) or `make clean` to remove everything
 
 ### Scripts
 
@@ -118,10 +128,14 @@ The project includes utility scripts in the `scripts/` directory:
 
 - **`run.sh`**: Unified script for starting the application
   - `./scripts/run.sh dev` - Start deps and run app with air (hot reload)
+    - Uses `leaderboard_dev` network and `leaderboard_dev_*` volumes
     - Press Ctrl+C to stop and automatically cleanup dependency services
-  - `./scripts/run.sh all` - Start full docker compose environment (runs in detached mode)
+  - `./scripts/run.sh prod-like` - Start full Docker Swarm stack (deploys to Swarm)
+    - Uses `leaderboard_prod` network and `leaderboard_prod_*` volumes
+    - Completely separate from dev mode (no cross-checking or interference)
   - Handles service health checking with wait4x
-  - Prevents container conflicts by checking if services are already running
+  - Prevents container conflicts by checking if services are already running (dev mode only)
+  - Initializes Docker Swarm automatically if needed (for prod-like mode)
   - **Can be run from any directory** - paths are resolved relative to script location
   
 - **`migrate.sh`**: Database migration tool
@@ -156,13 +170,13 @@ The project includes utility scripts in the `scripts/` directory:
    - Press Ctrl+C to stop and automatically cleanup dependency services
    - Air hot reload watches Go files (excludes docker/, docs/, scripts/ directories)
 
-3. **Testing full Docker setup**:
+3. **Testing full Docker Swarm setup**:
    ```bash
    make run
    ```
-   This runs everything in Docker containers for production-like testing.
-   - Services run in detached mode
-   - Use `make stop` to stop the full stack (preserves data) or `make clean` to remove everything
+   This runs everything in Docker Swarm for production-like testing.
+   - Services are deployed to Docker Swarm
+   - Use `make stop` to stop the Swarm stack (preserves data) or `make clean` to remove everything
 
 4. **Before committing**:
    ```bash
@@ -174,14 +188,14 @@ The project includes utility scripts in the `scripts/` directory:
 
 5. **Stopping services**:
    ```bash
-   # Stop the full stack from 'run' target but preserve data
+   # Stop the Swarm stack from 'run' target but preserve data
    make stop
    
    # Remove everything including data and build artifacts
    make clean
    ```
-   - `make stop`: Stops the full compose stack (from `make run`) but preserves volumes (data is kept)
-   - `make clean`: Removes all containers, volumes, and build artifacts (complete cleanup)
+   - `make stop`: Stops the Docker Swarm stack (from `make run`) but preserves volumes (data is kept)
+   - `make clean`: Removes all Swarm stacks, compose stacks, volumes, and build artifacts (complete cleanup)
 
 ## Testing
 
@@ -242,7 +256,7 @@ Migrations are organized into two directories:
 - **`migrations/schema/`**: Core schema migrations for all environments (tables, indexes, etc.)
 - **`migrations/dev/`**: Development-only seed data migrations (test users, sample scores)
 
-When running `make start-dev`, both schema and dev migrations are applied. When running `make run` (production-like mode), only schema migrations are applied.
+When running `make start-dev`, both schema and dev migrations are applied against dev postgres. When running `make run` (production-like mode with Docker Swarm), only schema migrations are applied against swarm postgres. The two databases are completely separate.
 
 ### Running Migrations Manually
 

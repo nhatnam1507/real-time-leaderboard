@@ -49,7 +49,7 @@ real-time-leaderboard/
 ├── docs/                           # Documentation
 ├── scripts/                        # Utility scripts (shell scripts)
 │   ├── init.sh                    # Initialize development environment (dev/ci modes)
-│   ├── run.sh                     # Application startup script (dev/all modes)
+│   ├── run.sh                     # Application startup script (dev/prod-like modes)
 │   ├── migrate.sh                 # Database migration tool
 │   └── validate-workflows.sh      # GitHub Actions workflow validation
 ├── tools/                          # Build tools (Go tools)
@@ -64,8 +64,8 @@ real-time-leaderboard/
 │       └── init/                  # Init action (Go setup + make init-ci)
 ├── docker/
 │   ├── Dockerfile                 # Production Docker image
-│   ├── docker-compose.deps.yml    # Dependency services (postgres, redis)
-│   └── docker-compose.yml         # Full compose file (includes deps + app)
+│   ├── docker-compose.dev.yml     # Dependency services for development (postgres, redis)
+│   └── docker-compose.swarm.yml   # Full stack for Docker Swarm (production-like)
 ├── api/                           # OpenAPI 3.0 specifications
 │   ├── v1/                        # API v1 specification
 │   │   └── openapi.yaml           # OpenAPI 3.0 YAML specification

@@ -1,8 +1,9 @@
 .PHONY: help init-dev init-ci build start-dev run check lint ut code-gen doc-gen stop clean
 
 # Variables
-COMPOSE_DEPS_FILE := docker/docker-compose.deps.yml
-COMPOSE_FULL_FILE := docker/docker-compose.yml
+COMPOSE_DEV_FILE := docker/docker-compose.dev.yml
+COMPOSE_SWARM_FILE := docker/docker-compose.swarm.yml
+STACK_NAME := leaderboard
 MIGRATE_SCRIPT := ./scripts/migrate.sh
 PATH := $(shell go env GOPATH)/bin:$(PATH)
 export PATH
@@ -25,19 +26,19 @@ init-dev:
 init-ci:
 	@./scripts/init.sh ci
 
-## build: Rebuild the docker container for the application
+## build: Build the docker image for the application
 build:
-	@echo "Rebuilding docker container..."
-	@docker compose -f $(COMPOSE_FULL_FILE) build
-	@echo "✓ Docker container rebuilt"
+	@echo "Building docker image..."
+	@docker build -f docker/Dockerfile -t leaderboard-app:latest .
+	@echo "✓ Docker image built"
 
 ## start-dev: Start compose deps file and start the application with air in local VM. Uses migrate script with db url pointing to localhost
 start-dev: init-dev
 	@./scripts/run.sh dev
 
-## run: Run full run with app and deps via docker compose in local VM. Uses migrate script with db url pointing to localhost
+## run: Run full Docker Swarm stack with app and deps. Uses migrate script with db url pointing to localhost
 run: init-dev build
-	@./scripts/run.sh all
+	@./scripts/run.sh prod-like
 
 ## lint: Run linter (golangci-lint)
 lint:
@@ -67,17 +68,48 @@ check: lint code-gen ut doc-gen
 	@./scripts/validate-workflows.sh
 	@echo "All checks completed successfully"
 
-## stop: Stop full compose stack from 'run' target. Containers removed, volumes/data preserved
+## stop: Stop Docker Swarm stack from 'run' target. Containers removed, volumes/data preserved
 stop:
-	@echo "Stopping full compose stack..."
-	@docker compose -f $(COMPOSE_FULL_FILE) down 2>/dev/null || true
-	@echo "✓ Full compose stack stopped (data preserved)"
+	@echo "Stopping Docker Swarm stack..."
+	@docker stack rm $(STACK_NAME) 2>/dev/null || true
+	@echo "Waiting for stack removal to complete..."
+	@timeout=60; interval=2; elapsed=0; \
+	while [ $$elapsed -lt $$timeout ]; do \
+		if ! docker stack ls | grep -q "^$(STACK_NAME) "; then \
+			echo "✓ Stack removed"; \
+			break; \
+		fi; \
+		sleep $$interval; \
+		elapsed=$$((elapsed + interval)); \
+	done; \
+	if [ $$elapsed -ge $$timeout ]; then \
+		echo "⚠ Warning: Stack removal timeout"; \
+	fi
+	@echo "✓ Docker Swarm stack stopped (data preserved)"
 
-## clean: Remove all docker compose stacks, volumes, and related files
+## clean: Remove all docker compose stacks, swarm stacks, volumes, and related files
 clean:
-	@echo "Cleaning up all compose stacks, volumes, and related files..."
-	@docker compose -f $(COMPOSE_FULL_FILE) down -v 2>/dev/null || true
-	@docker compose -f $(COMPOSE_DEPS_FILE) down -v 2>/dev/null || true
+	@echo "Cleaning up all stacks, volumes, and related files..."
+	@docker stack rm $(STACK_NAME) 2>/dev/null || true
+	@echo "Waiting for stack removal to complete..."
+	@timeout=60; interval=2; elapsed=0; \
+	while [ $$elapsed -lt $$timeout ]; do \
+		if ! docker stack ls | grep -q "^$(STACK_NAME) "; then \
+			echo "✓ Stack removed"; \
+			break; \
+		fi; \
+		sleep $$interval; \
+		elapsed=$$((elapsed + interval)); \
+	done; \
+	if [ $$elapsed -ge $$timeout ]; then \
+		echo "⚠ Warning: Stack removal timeout"; \
+	fi
+	@docker compose -f $(COMPOSE_DEV_FILE) down -v 2>/dev/null || true
+	@echo "Removing any remaining containers..."
+	@docker ps -a --filter "name=leaderboard" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@echo "Removing dev and prod volumes..."
+	@docker volume rm leaderboard_dev_postgres_data leaderboard_dev_redis_data \
+		leaderboard_prod_postgres_data leaderboard_prod_redis_data 2>/dev/null || true
 	@echo "Cleaning up build artifacts..."
 	@rm -rf tmp/ 2>/dev/null || true
 	@echo "✓ Cleanup complete (all data removed)"

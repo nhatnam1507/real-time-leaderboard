@@ -1,0 +1,81 @@
+services:
+  app:
+    image: leaderboard-app:latest
+    deploy:
+      replicas: 3
+    environment:
+      DB_HOST: postgres
+      DB_NAME: leaderboard
+      DB_PASSWORD: postgres
+      DB_PORT: "5432"
+      DB_SSLMODE: disable
+      DB_USER: postgres
+      JWT_SECRET_KEY: your-secret-key-change-in-production
+      LOG_LEVEL: info
+      LOG_PRETTY: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8080
+        published: 8080
+        protocol: tcp
+  postgres:
+    environment:
+      POSTGRES_DB: leaderboard
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      timeout: 5s
+      interval: 5s
+      retries: 5
+    image: postgres:15-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: 5432
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: postgres_data
+        target: /var/lib/postgresql/data
+        volume: {}
+  redis:
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 3s
+      interval: 5s
+      retries: 5
+    image: redis:7-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 6379
+        published: 6379
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: redis_data
+        target: /data
+        volume: {}
+networks:
+  default:
+    name: leaderboard_prod
+volumes:
+  postgres_data:
+    name: leaderboard_prod_postgres_data
+  redis_data:
+    name: leaderboard_prod_redis_data

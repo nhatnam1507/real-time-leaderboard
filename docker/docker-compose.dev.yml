@@ -31,7 +31,13 @@ services:
       timeout: 3s
       retries: 5
 
+networks:
+  default:
+    name: leaderboard_dev
+
 volumes:
   postgres_data:
+    name: leaderboard_dev_postgres_data
   redis_data:
+    name: leaderboard_dev_redis_data
 

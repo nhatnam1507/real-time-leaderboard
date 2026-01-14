@@ -53,7 +53,7 @@ The server will start on `http://localhost:8080`
 
 ### Production-like Mode
 
-Run full Docker Compose setup (all services in containers):
+Run full Docker Swarm stack (all services in containers):
 
 ```bash
 make run
@@ -61,15 +61,20 @@ make run
 
 Or directly (can be run from any directory):
 ```bash
-./scripts/run.sh all
+./scripts/run.sh prod-like
 ```
 
 This will:
-- Start all services (PostgreSQL, Redis, Application) via Docker Compose
-- Wait for services to be ready using wait4x
-- Run database migrations (idempotent)
-- Start the application in a container
+- Initialize Docker Swarm (if not already initialized)
+- Deploy the full stack (PostgreSQL, Redis, Application) to Docker Swarm
+- Wait for swarm services to be ready using wait4x
+- Run database migrations (idempotent) against swarm postgres
 - Rebuild the application image (via `make build`) before starting
+
+**Note**: Dev and prod-like modes are completely separate:
+- Dev mode uses `leaderboard_dev` network and `leaderboard_dev_*` volumes
+- Prod-like mode uses `leaderboard_prod` network and `leaderboard_prod_*` volumes
+- They can run independently without interference
 
 The server will start on `http://localhost:8080`
 
@@ -121,20 +126,20 @@ make help
 # Initialize development environment (install tools)
 make init-dev
 
-# Rebuild the application Docker image
+# Build the application Docker image (direct docker build)
 make build
 
 # Start development environment (deps + app with hot reload)
 make start-dev
 # Press Ctrl+C to stop and cleanup dependency services
 
-# Run full Docker Compose setup (all services in containers)
+# Run full Docker Swarm stack (all services in containers)
 make run
 
-# Stop the full Docker Compose stack from 'run' target (preserves data/volumes)
+# Stop the Docker Swarm stack from 'run' target (preserves data/volumes)
 make stop
 
-# Remove all Docker Compose stacks, volumes, and related files
+# Remove all Docker Swarm stacks, compose stacks, volumes, and related files
 make clean
 
 # Run linter
