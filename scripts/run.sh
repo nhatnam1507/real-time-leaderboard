@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Run script for starting the application
-# Usage: ./scripts/run.sh [dev|all]
-#   dev:  Start dependency services and run app with air (hot reload)
-#   all:  Start full docker compose environment (app + deps in containers)
+# Usage: ./scripts/run.sh [dev|prod-like]
+#   dev:       Start dependency services and run app with air (hot reload)
+#   prod-like: Start full Docker Swarm stack (app + deps in containers)
 
 set -e
 
@@ -18,19 +18,20 @@ cd "$PROJECT_ROOT"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Configuration (paths relative to project root)
-COMPOSE_DEPENDENCIES_FILE="$PROJECT_ROOT/docker/docker-compose.deps.yml"
-COMPOSE_FULL_STACK_FILE="$PROJECT_ROOT/docker/docker-compose.yml"
+COMPOSE_DEV_FILE="$PROJECT_ROOT/docker/docker-compose.dev.yml"
+COMPOSE_SWARM_FILE="$PROJECT_ROOT/docker/docker-compose.swarm.yml"
 MIGRATION_SCRIPT="$SCRIPT_DIR/migrate.sh"
+STACK_NAME="leaderboard"
 # Migrations run on host, so always use localhost (ports are exposed)
 DATABASE_URL="postgres://postgres:postgres@localhost:5432/leaderboard?sslmode=disable"
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [dev|all]"
+    echo "Usage: $0 [dev|prod-like]"
     echo ""
     echo "Modes:"
-    echo "  dev  Start dependency services and run app with air (hot reload)"
-    echo "  all  Start full docker compose environment (app + deps in containers)"
+    echo "  dev       Start dependency services and run app with air (hot reload)"
+    echo "  prod-like Start full Docker Swarm stack (app + deps in containers)"
     exit 1
 }
 
@@ -38,6 +39,27 @@ show_usage() {
 is_container_running() {
     local container_name=$1
     docker ps --format '{{.Names}}' | grep -q "^${container_name}$"
+}
+
+# Function to wait for stack to be removed
+wait_for_stack_removal() {
+    local stack_name=$1
+    local timeout=${2:-60}
+    local interval=${3:-2}
+    local elapsed=0
+    
+    echo "Waiting for stack '$stack_name' to be removed..."
+    while [ $elapsed -lt $timeout ]; do
+        if ! docker stack ls | grep -q "^${stack_name} "; then
+            echo "✓ Stack removed"
+            return 0
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+    
+    echo "Warning: Stack removal timeout after ${timeout}s"
+    return 1
 }
 
 # Function to ensure dependency services are running
@@ -51,12 +73,12 @@ ensure_dependency_services_running() {
     fi
     
     echo "Starting dependency services..."
-    docker compose -f "$COMPOSE_DEPENDENCIES_FILE" up -d
+    docker compose -f "$COMPOSE_DEV_FILE" up -d
 }
 
 # Function to wait for services to be ready
 # Note: wait4x runs on host, so we check localhost (ports are exposed)
-# In all mode, app container uses service names (postgres/redis) which is configured in docker-compose.yml
+# In prod-like mode, app container uses service names (postgres/redis) from Docker Swarm network
 wait_for_services() {
     echo "Waiting for services to be ready..."
     
@@ -92,7 +114,7 @@ run_migrations() {
 stop_dependency_services() {
     echo ""
     echo "Stopping dependency services..."
-    docker compose -f "$COMPOSE_DEPENDENCIES_FILE" down 2>/dev/null || true
+    docker compose -f "$COMPOSE_DEV_FILE" down 2>/dev/null || true
     echo "Cleanup complete"
     exit 0
 }
@@ -122,30 +144,45 @@ start_development_mode() {
     air
 }
 
-# Function to start full stack mode (all services in containers)
-start_full_stack_mode() {
-    echo "Starting full docker compose environment..."
+# Function to start prod-like mode (Docker Swarm stack)
+start_prod_like_mode() {
+    echo "Starting Docker Swarm stack..."
     
-    # Ensure dependency services are running
-    ensure_dependency_services_running
-    
-    # Wait for services to be ready
-    wait_for_services
-    
-    # Run schema migrations (no dev seed in production-like mode)
-    run_migrations "migrations/schema"
-    
-    # Start app container
-    # App container uses service names (postgres/redis) from docker network (configured in docker-compose.yml)
-    if is_container_running "leaderboard-app"; then
-        echo "Application container is already running"
-    else
-        echo "Starting application container..."
-        # docker-compose.yml has depends_on with health checks, so it will wait for deps to be healthy
-        docker compose -f "$COMPOSE_FULL_STACK_FILE" up -d app
+    # Check if Docker Swarm is initialized
+    if ! docker info | grep -q "Swarm: active"; then
+        echo "Initializing Docker Swarm..."
+        docker swarm init 2>/dev/null || {
+            echo "Warning: Swarm may already be initialized or failed to initialize"
+        }
     fi
     
-    echo "Services are running. Use 'docker compose -f $COMPOSE_FULL_STACK_FILE logs -f' to view logs."
+    # Check if stack already exists and remove it first
+    if docker stack ls | grep -q "^${STACK_NAME} "; then
+        echo "Removing existing stack..."
+        docker stack rm "$STACK_NAME" 2>/dev/null || true
+        wait_for_stack_removal "$STACK_NAME" 60 2
+    fi
+    
+    # Deploy stack to Swarm first
+    # Swarm uses leaderboard_prod network, dev uses leaderboard_dev network (no conflict)
+    echo "Deploying stack to Docker Swarm..."
+    docker stack deploy -c "$COMPOSE_SWARM_FILE" "$STACK_NAME"
+    
+    # Wait for swarm postgres to be ready
+    echo "Waiting for swarm postgres to be ready..."
+    wait4x postgresql "$DATABASE_URL" \
+        --timeout 120s \
+        --interval 2s || {
+        echo "Error: Failed to connect to swarm postgres"
+        exit 1
+    }
+    
+    # Run schema migrations against swarm postgres (no dev seed in production-like mode)
+    echo "Running migrations against swarm postgres..."
+    run_migrations "migrations/schema"
+    
+    echo "Stack deployed. Use 'docker stack services $STACK_NAME' to view services."
+    echo "Use 'docker stack logs -f $STACK_NAME' to view logs."
 }
 
 # Main function - handles CLI input and execution
@@ -167,8 +204,8 @@ main() {
         dev)
             start_development_mode
             ;;
-        all)
-            start_full_stack_mode
+        prod-like)
+            start_prod_like_mode
             ;;
         *)
             echo "Error: Invalid mode '$mode'"
