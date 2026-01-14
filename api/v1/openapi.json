@@ -135,6 +135,40 @@
           "score"
         ],
         "type": "object"
+      },
+      "User": {
+        "properties": {
+          "created_at": {
+            "description": "User creation timestamp",
+            "example": "2024-01-01T00:00:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "email": {
+            "description": "User's email address",
+            "example": "john@example.com",
+            "format": "email",
+            "type": "string"
+          },
+          "id": {
+            "description": "User identifier",
+            "example": "00000000-0000-0000-0000-000000000001",
+            "format": "uuid",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "User last update timestamp",
+            "example": "2024-01-01T00:00:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "username": {
+            "description": "User's username",
+            "example": "john_doe",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -198,6 +232,54 @@
           }
         },
         "summary": "Login user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "description": "Returns the current authenticated user's information based on the JWT token in the Authorization header.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/User"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "User information retrieved successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get current user information",
         "tags": [
           "auth"
         ]
