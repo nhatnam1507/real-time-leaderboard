@@ -56,6 +56,9 @@ make start-dev
 make run
 # Or directly: ./scripts/run.sh all
 
+# Rebuild the application Docker image
+make build
+
 # Run linter
 # - Runs golangci-lint on all code
 make lint
