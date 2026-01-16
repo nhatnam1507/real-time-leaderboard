@@ -22,12 +22,35 @@ type ErrorInfo struct {
 	Message string `json:"message"`
 }
 
-// Pagination represents pagination information (placeholder for future use)
+// Pagination represents pagination information
 type Pagination struct {
 	Page       int   `json:"page,omitempty"`
 	Limit      int   `json:"limit,omitempty"`
 	Total      int64 `json:"total,omitempty"`
 	TotalPages int   `json:"total_pages,omitempty"`
+}
+
+// NewPagination creates pagination metadata from offset, limit, and total count
+func NewPagination(offset, limit int, total int64) Pagination {
+	page := 1
+	if limit > 0 {
+		page = (offset / limit) + 1
+	}
+
+	totalPages := 0
+	if limit > 0 {
+		totalPages = int((total + int64(limit) - 1) / int64(limit))
+		if totalPages == 0 && total > 0 {
+			totalPages = 1
+		}
+	}
+
+	return Pagination{
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	}
 }
 
 // Success sends a successful response

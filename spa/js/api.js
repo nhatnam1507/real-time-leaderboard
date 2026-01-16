@@ -211,6 +211,12 @@ class API {
     }
 
     // Leaderboard endpoints
+    async getLeaderboard(limit = 10, offset = 0) {
+        return this.request(`/leaderboard?limit=${limit}&offset=${offset}`, {
+            method: 'GET',
+        });
+    }
+
     async submitScore(score) {
         return this.request('/leaderboard/score', {
             method: 'PUT',

@@ -8,9 +8,3 @@ type LeaderboardEntry struct {
 	Score    int64  `json:"score"`
 	Rank     int64  `json:"rank"`
 }
-
-// Leaderboard represents a leaderboard
-type Leaderboard struct {
-	Entries []LeaderboardEntry `json:"entries"`
-	Total   int64              `json:"total"`
-}

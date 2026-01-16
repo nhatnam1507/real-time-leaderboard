@@ -145,6 +145,65 @@ paths:
               schema:
                 $ref: '#/components/schemas/Response'
 
+  /leaderboard:
+    get:
+      tags:
+        - leaderboard
+      summary: Get leaderboard with pagination
+      description: |
+        Retrieve the leaderboard with pagination support. This endpoint is used for initial dashboard load.
+        Returns a paginated list of leaderboard entries sorted by rank (highest score first).
+        
+        **Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL
+        on the first request, ensuring seed data and existing scores are available.
+      parameters:
+        - name: limit
+          in: query
+          description: Number of entries to return per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+        - name: offset
+          in: query
+          description: Number of entries to skip (for pagination)
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+      responses:
+        '200':
+          description: Leaderboard retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/LeaderboardEntry'
+                        description: List of leaderboard entries, sorted by rank
+                      meta:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
   /leaderboard/score:
     put:
       tags:
@@ -153,7 +212,12 @@ paths:
       description: |
         Update the score for the authenticated user. Requires authentication.
         Uses UPSERT pattern - automatically creates the record if it doesn't exist, or updates if it exists.
-        The score will be saved in PostgreSQL (backup) and updated in Redis (leaderboard).
+        The score will be saved in PostgreSQL (persistent storage) and updated in Redis (cache).
+        
+        **Broadcast Optimization**: After successful update, if the user's rank is within the top 1000,
+        a leaderboard entry delta update is published to the `leaderboard:viewer:updates` topic.
+        Entries ranked outside the top 1000 are not broadcasted to reduce network traffic.
+        
         Returns the user ID and updated score.
       security:
         - BearerAuth: []
@@ -200,42 +264,38 @@ paths:
     get:
       tags:
         - leaderboard
-      summary: Get leaderboard (SSE stream)
+      summary: Get leaderboard delta updates (SSE stream)
       description: |
-        Server-Sent Events (SSE) stream for real-time leaderboard updates.
-        Returns `text/event-stream` content type. Clients receive initial leaderboard data
-        and automatic updates when scores change. Updates are pushed via Redis pub/sub
-        notifications - no polling required.
+        Server-Sent Events (SSE) stream for real-time leaderboard entry delta updates.
+        Returns `text/event-stream` content type. Clients receive delta updates (single entry changes)
+        when scores change. Updates are pushed via Redis pub/sub notifications - no polling required.
+        
+        **Usage Pattern**: 
+        1. Load initial leaderboard using GET /leaderboard
+        2. Connect to this SSE stream to receive delta updates
+        3. Merge delta updates into local leaderboard state
+        4. If SSE disconnects, reload from GET /leaderboard
         
         **Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL
         on the first request, ensuring seed data and existing scores are available.
         
-        **Pagination**: The `limit` parameter controls how many top players to return (default: 100, max: 100).
-        The leaderboard always shows top N players starting from rank 1 (no offset support for SSE).
-      parameters:
-        - name: limit
-          in: query
-          description: Number of top players to return (always starts from rank 1)
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 100
-            example: 50
+        **Broadcast Optimization**: Only entries ranked within the top 1000 trigger broadcasts.
+        Entries ranked outside this range are not sent to reduce network traffic, as they are
+        unlikely to be relevant to clients viewing top N leaderboards.
       responses:
         '200':
           description: |
-            SSE stream with leaderboard data. Content-Type: text/event-stream.
-            Initial leaderboard sent immediately, followed by updates when scores change.
-            Each SSE message contains a JSON object with the standard response format.
+            SSE stream with leaderboard entry delta updates. Content-Type: text/event-stream.
+            Each SSE message contains a JSON object with a single leaderboard entry.
+            Clients should merge these updates into their local leaderboard state.
           content:
             text/event-stream:
               schema:
                 type: string
                 example: |
-                  data: {"success":true,"data":{"entries":[{"user_id":"00000000-0000-0000-0000-000000000001","username":"alice","score":1500,"rank":1},{"user_id":"00000000-0000-0000-0000-000000000002","username":"bob","score":1400,"rank":2}],"total":2},"message":"Leaderboard retrieved successfully"}
+                  data: {"success":true,"data":{"user_id":"00000000-0000-0000-0000-000000000001","username":"alice","score":1600,"rank":1},"message":"Leaderboard entry updated"}
                   
-                  data: {"success":true,"data":{"entries":[{"user_id":"00000000-0000-0000-0000-000000000001","username":"alice","score":1600,"rank":1},{"user_id":"00000000-0000-0000-0000-000000000002","username":"bob","score":1400,"rank":2}],"total":2},"message":"Leaderboard updated"}
+                  data: {"success":true,"data":{"user_id":"00000000-0000-0000-0000-000000000002","username":"bob","score":1500,"rank":2},"message":"Leaderboard entry updated"}
         '500':
           description: Internal server error
           content:
@@ -368,17 +428,24 @@ components:
           description: User's rank in the leaderboard (1-indexed)
           example: 1
 
-    Leaderboard:
+    Pagination:
       type: object
       properties:
-        entries:
-          type: array
-          items:
-            $ref: '#/components/schemas/LeaderboardEntry'
-          description: List of leaderboard entries, sorted by rank
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+          example: 1
+        limit:
+          type: integer
+          description: Number of items per page
+          example: 10
         total:
           type: integer
           format: int64
-          description: Number of entries returned (equals the limit parameter when limit is applied, or the actual number of players if limit exceeds available entries)
+          description: Total number of items
           example: 50
+        total_pages:
+          type: integer
+          description: Total number of pages
+          example: 5
 
