@@ -219,7 +219,7 @@ make code-gen
 
 This runs `go generate ./...` which processes all `//go:generate` directives in the codebase. Currently, mocks are generated for:
 - `UserRepository` and `JWTManager` interfaces in the auth module
-- `UserRepository`, `LeaderboardBackupRepository`, `LeaderboardRepository`, and `BroadcastService` interfaces in the leaderboard module
+- `UserRepository`, `LeaderboardPersistenceRepository`, `LeaderboardCacheRepository`, and `BroadcastService` interfaces in the leaderboard module
 
 **When to regenerate**:
 - After adding or modifying interface methods

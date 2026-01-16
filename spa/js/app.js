@@ -302,7 +302,8 @@ class App {
                 }
                 
                 if (profileTotalPlayers) {
-                    profileTotalPlayers.textContent = leaderboardData.total || entries.length;
+                    // Total is now in pagination meta field, fallback to entries length
+                    profileTotalPlayers.textContent = leaderboardData.meta?.total || entries.length;
                 }
             }
         } catch (error) {

@@ -9,10 +9,8 @@ import (
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 )
 
-// BroadcastService defines the interface for broadcasting leaderboard updates
+// BroadcastService defines the interface for broadcasting leaderboard entry delta updates
 type BroadcastService interface {
-	PublishScoreUpdate(ctx context.Context) error
-	SubscribeToScoreUpdates(ctx context.Context) (<-chan struct{}, error)
-	BroadcastLeaderboard(ctx context.Context, leaderboard *domain.Leaderboard) error
-	SubscribeToLeaderboardUpdates(ctx context.Context) (<-chan *domain.Leaderboard, error)
+	BroadcastEntryUpdate(ctx context.Context, entry *domain.LeaderboardEntry) error
+	SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error)
 }

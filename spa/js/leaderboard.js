@@ -3,14 +3,36 @@ class LeaderboardManager {
     constructor() {
         this.eventSource = null;
         this.isConnected = false;
+        this.leaderboardEntries = new Map(); // Map<userID, entry>
+        this.totalPlayers = 0;
+        this.limit = 10;
     }
 
-    connect(limit = 10) {
+    async loadInitialLeaderboard(limit = 10) {
+        try {
+            const response = await fetch(`/api/v1/leaderboard?limit=${limit}&offset=0`);
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                this.updateLeaderboard(data.data, data.meta);
+            }
+        } catch (error) {
+            console.error('Error loading initial leaderboard:', error);
+        }
+    }
+
+    async connect(limit = 10) {
         if (this.eventSource) {
             this.disconnect();
         }
 
-        const url = `/api/v1/leaderboard/stream?limit=${limit}`;
+        this.limit = limit;
+
+        // Load initial leaderboard
+        await this.loadInitialLeaderboard(limit);
+
+        // Connect to SSE stream for delta updates
+        const url = `/api/v1/leaderboard/stream`;
         this.eventSource = new EventSource(url);
 
         this.eventSource.onopen = () => {
@@ -22,7 +44,7 @@ class LeaderboardManager {
             try {
                 const data = JSON.parse(event.data);
                 if (data.success && data.data) {
-                    this.updateLeaderboard(data.data);
+                    this.handleEntryUpdate(data.data);
                 }
             } catch (error) {
                 console.error('Error parsing leaderboard data:', error);
@@ -33,6 +55,9 @@ class LeaderboardManager {
             console.error('SSE connection error:', error);
             this.isConnected = false;
             this.updateConnectionStatus(false);
+            
+            // Reload leaderboard from API on disconnect
+            this.loadInitialLeaderboard(limit);
             
             // Try to reconnect after a delay
             setTimeout(() => {
@@ -68,9 +93,77 @@ class LeaderboardManager {
         }
     }
 
-    updateLeaderboard(data) {
-        const entries = data.entries || [];
-        const total = data.total || 0;
+    handleEntryUpdate(entry) {
+        // Use the rank from the event message (authoritative from backend)
+        // If rank is greater than limit, entry is outside top N - remove it
+        if (entry.rank > this.limit) {
+            // Entry is outside top N, remove it from local state
+            this.leaderboardEntries.delete(entry.user_id);
+            
+            // Reload leaderboard to get the current top N from backend
+            // This ensures we have the correct top N after an entry falls out
+            this.loadInitialLeaderboard(this.limit);
+            return;
+        }
+        
+        // Entry is within top N, update it in local state
+        this.leaderboardEntries.set(entry.user_id, entry);
+        
+        // Rebuild leaderboard from local state
+        this.renderLeaderboard();
+    }
+
+    updateLeaderboard(data, meta) {
+        const entries = Array.isArray(data) ? data : [];
+        const total = meta?.total || 0;
+
+        // Update local state
+        this.leaderboardEntries.clear();
+        entries.forEach(entry => {
+            this.leaderboardEntries.set(entry.user_id, entry);
+        });
+
+        // Update total from pagination meta
+        this.totalPlayers = total;
+
+        // Render leaderboard
+        this.renderLeaderboard();
+    }
+
+    renderLeaderboard() {
+        // Convert map to array and sort by score descending (highest first)
+        // Then recalculate ranks based on sorted position
+        const allEntries = Array.from(this.leaderboardEntries.values())
+            .sort((a, b) => {
+                // Primary sort: by score descending
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                // Secondary sort: by user_id for consistency when scores are equal
+                return a.user_id.localeCompare(b.user_id);
+            });
+
+        // Get top N entries with recalculated ranks
+        const entries = allEntries
+            .slice(0, this.limit)
+            .map((entry, index) => {
+                // Recalculate rank based on sorted position (1-indexed)
+                return {
+                    ...entry,
+                    rank: index + 1
+                };
+            });
+
+        // Remove entries that are outside the top N from local state
+        // This ensures entries that fall out of top N are removed
+        const topNUserIDs = new Set(entries.map(e => e.user_id));
+        for (const [userID] of this.leaderboardEntries) {
+            if (!topNUserIDs.has(userID)) {
+                this.leaderboardEntries.delete(userID);
+            }
+        }
+
+        const total = this.totalPlayers || this.leaderboardEntries.size;
 
         // Update stats
         const totalPlayersEl = document.getElementById('total-players');

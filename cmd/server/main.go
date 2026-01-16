@@ -64,8 +64,8 @@ func main() {
 	userRepo := authInfra.NewPostgresUserRepository(db.Pool)
 	jwtMgr := authJWT.NewManager(cfg.JWT.SecretKey, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 
-	backupRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
-	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
+	persistenceRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
+	cacheRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
 	leaderboardUserRepo := leaderboardInfra.NewUserRepository(db.Pool)
 
 	// Initialize broadcast service (infrastructure layer)
@@ -73,16 +73,8 @@ func main() {
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
-	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, broadcastService, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, leaderboardUserRepo, broadcastService, l)
-
-	// Start broadcasting in background
-	ctx := context.Background()
-	go func() {
-		if err := leaderboardUseCase.StartBroadcasting(ctx); err != nil {
-			l.Errorf(ctx, "Broadcast service error: %v", err)
-		}
-	}()
+	scoreUseCase := leaderboardApp.NewScoreUseCase(persistenceRepo, cacheRepo, leaderboardUserRepo, broadcastService, l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(cacheRepo, persistenceRepo, leaderboardUserRepo, broadcastService, l)
 
 	// Initialize handlers
 	authHandler := v1Auth.NewHandler(authUseCase)

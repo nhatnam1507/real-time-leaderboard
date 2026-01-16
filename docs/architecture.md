@@ -239,10 +239,18 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 
 2. **Repository Interfaces in Application Layer**: Repository interfaces are defined in the application layer (representing application needs), not in the domain layer. They return domain objects, not DTOs.
    ```go
-   // ✅ Good - repository interface in application layer, returns domain object
+   // ✅ Good - repository interfaces in application layer, return domain objects
    // application/repository.go
-   type LeaderboardRepository interface {
+   type LeaderboardPersistenceRepository interface {
+       GetLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, error)
+       UpsertScore(ctx context.Context, userID string, score int64) error
+   }
+   
+   type LeaderboardCacheRepository interface {
        GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error)
+       GetTotalPlayers(ctx context.Context) (int64, error)
+       GetUserRank(ctx context.Context, userID string) (int64, error)
+       UpdateScore(ctx context.Context, userID string, score int64) error
    }
    
    // ❌ Bad - returns DTO
@@ -256,7 +264,8 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    // ✅ Good - domain constants
    const (
        RedisLeaderboardKey = "leaderboard:global"
-       RedisScoreUpdateTopic = "leaderboard:score:updates"
+       RedisViewerUpdateTopic = "leaderboard:viewer:updates"
+       MaxBroadcastRank = 1000
    )
    ```
 
@@ -276,15 +285,13 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 2. **Map DTOs to Domain Objects**: Infrastructure implementations map DTOs to domain objects when returning data to the application layer. Domain objects are the contract between layers.
    ```go
    // ✅ Good - maps DTO to domain
-   func (r *PostgresRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
+   func (r *PostgresRepository) GetLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, error) {
        // Query with DTO
        var dto ScoreDTO
        // ... scan into dto
        
        // Map to domain
-       return &domain.Leaderboard{
-           Entries: mapToDomain(dto),
-       }, nil
+       return mapToDomainEntries(dto), nil
    }
    ```
 
@@ -303,11 +310,12 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 1. **Enrich Domain Objects**: Application layer orchestrates data from multiple sources to enrich domain objects. For example, combining leaderboard rankings with user information.
    ```go
    // ✅ Good - enriches domain objects with data from multiple sources
-   func (uc *UseCase) GetFullLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
-       entries, _ := uc.leaderboardRepo.GetTopPlayers(ctx, 1000, 0)
+   func (uc *UseCase) GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error) {
+       entries, _ := uc.cacheRepo.GetTopPlayers(ctx, 1000, 0)
+       total, _ := uc.cacheRepo.GetTotalPlayers(ctx)
        usernames, _ := uc.userRepo.GetByIDs(ctx, extractUserIDs(entries))
        enrichEntries(entries, usernames)
-       return &domain.Leaderboard{Entries: entries}, nil
+       return entries, total, nil
    }
    ```
 
@@ -316,14 +324,19 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    // ✅ Good - orchestrates business logic and coordinates services
    func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
        // Update data in repositories
-       if err := uc.backupRepo.UpsertScore(ctx, userID, req.Score); err != nil {
+       if err := uc.persistenceRepo.UpsertScore(ctx, userID, req.Score); err != nil {
            return err
        }
-       if err := uc.leaderboardRepo.UpdateScore(ctx, userID, req.Score); err != nil {
+       if err := uc.cacheRepo.UpdateScore(ctx, userID, req.Score); err != nil {
            return err
        }
-       // Publish notification via broadcast service (not repository)
-       return uc.broadcastService.PublishScoreUpdate(ctx)
+       // Get rank and broadcast entry delta if within threshold
+       rank, _ := uc.cacheRepo.GetUserRank(ctx, userID)
+       if rank <= domain.MaxBroadcastRank {
+           entry := createEntry(userID, req.Score, rank)
+           return uc.broadcastService.BroadcastEntryUpdate(ctx, &entry)
+       }
+       return nil
    }
    ```
 
@@ -332,20 +345,19 @@ These follow dependency inversion - modules depend on abstractions, not concrete
    // ✅ Good - service interface in application layer
    // application/broadcast_service.go
    type BroadcastService interface {
-       PublishScoreUpdate(ctx context.Context) error  // Publish notifications
-       SubscribeToScoreUpdates(ctx context.Context) (<-chan struct{}, error)
-       BroadcastLeaderboard(ctx context.Context, leaderboard *domain.Leaderboard) error
-       SubscribeToLeaderboardUpdates(ctx context.Context) (<-chan *domain.Leaderboard, error)
+       BroadcastEntryUpdate(ctx context.Context, entry *domain.LeaderboardEntry) error
+       SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error)
    }
    
    // ✅ Good - use case uses interface, not concrete implementation
    type ScoreUseCase struct {
        broadcastService BroadcastService  // interface, not *RedisBroadcastService
-       leaderboardRepo LeaderboardRepository
+       persistenceRepo LeaderboardPersistenceRepository
+       cacheRepo LeaderboardCacheRepository
        // ... other dependencies
    }
    
-   // ✅ Good - repository only updates data, use case publishes notifications
+   // ✅ Good - repository only updates data, use case broadcasts entry deltas
    func (uc *ScoreUseCase) SubmitScore(...) error {
        uc.leaderboardRepo.UpdateScore(...)  // Only updates data
        uc.broadcastService.PublishScoreUpdate(...)  // Publishes notification

@@ -4,12 +4,12 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/middleware"
+	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
 
@@ -19,8 +19,6 @@ import (
 const (
 	// Keep-alive interval for SSE connections
 	keepAliveInterval = 15 * time.Second
-	// Initial leaderboard limit for SSE
-	defaultLeaderboardLimit = 100
 )
 
 // LeaderboardHandler handles HTTP requests for leaderboards and scores
@@ -40,25 +38,47 @@ func NewLeaderboardHandler(
 	}
 }
 
-// GetLeaderboard handles getting the leaderboard via SSE
-// Handler only manages SSE connection lifecycle, business logic is in use case
-func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
+// GetLeaderboardPaginated handles GET /leaderboard with pagination
+func (h *LeaderboardHandler) GetLeaderboardPaginated(c *gin.Context) {
+	var pagination request.PaginationRequest
+	if err := c.ShouldBindQuery(&pagination); err != nil {
+		response.Error(c, validator.Validate(pagination))
+		return
+	}
+
+	if err := validator.Validate(pagination); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Sync from PostgreSQL to Redis if needed (lazy loading)
+	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
+
+	// Normalize pagination
+	normalized := pagination.Normalize()
+	limit := int64(normalized.GetLimit())
+	offset := int64(normalized.GetOffset())
+
+	entries, total, err := h.leaderboardUseCase.GetLeaderboardPaginated(ctx, limit, offset)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Create pagination metadata
+	meta := response.NewPagination(normalized.GetOffset(), normalized.GetLimit(), total)
+	response.SuccessWithMeta(c, entries, "Leaderboard retrieved successfully", meta)
+}
+
+// GetLeaderboardStream handles GET /leaderboard/stream via SSE for real-time delta updates
+func (h *LeaderboardHandler) GetLeaderboardStream(c *gin.Context) {
 	// Set headers for SSE
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
-
-	// Parse limit from query params (offset is not supported for SSE, always 0)
-	limit := defaultLeaderboardLimit
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
-			if limit > defaultLeaderboardLimit {
-				limit = defaultLeaderboardLimit
-			}
-		}
-	}
 
 	// Create context for the request
 	ctx := c.Request.Context()
@@ -66,27 +86,14 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Sync from PostgreSQL to Redis if needed (lazy loading)
 	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
-	// Subscribe to leaderboard updates (gets channel for full leaderboard)
-	updateCh, err := h.leaderboardUseCase.SubscribeToLeaderboardUpdates(ctx)
+	// Subscribe to entry delta updates
+	updateCh, err := h.leaderboardUseCase.SubscribeToEntryUpdates(ctx)
 	if err != nil {
 		// If subscription fails, create a closed channel
-		closedCh := make(chan *domain.Leaderboard)
+		closedCh := make(chan *domain.LeaderboardEntry)
 		close(closedCh)
 		updateCh = closedCh
 	}
-
-	// Fetch initial leaderboard
-	fullLeaderboard, err := h.leaderboardUseCase.GetFullLeaderboard(ctx)
-	if err != nil {
-		// If we can't get initial leaderboard, still try to stream updates
-		fullLeaderboard = &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
-	}
-
-	// Extract limit from full leaderboard
-	filteredLeaderboard := extractLimit(fullLeaderboard, limit)
-
-	// Send initial leaderboard via SSE using standard response format
-	sendSSEResponse(c, filteredLeaderboard, "Leaderboard retrieved successfully")
 
 	// Set up keep-alive ticker
 	ticker := time.NewTicker(keepAliveInterval)
@@ -95,24 +102,21 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Handle client disconnection
 	notify := c.Writer.CloseNotify()
 
-	// Keep connection, push updates from broadcaster
+	// Keep connection, push delta updates from broadcaster
 	for {
 		select {
 		case <-notify:
 			// Client disconnected
 			return
 
-		case fullLeaderboard, ok := <-updateCh:
+		case entry, ok := <-updateCh:
 			if !ok {
 				// Channel closed, connection ended
 				return
 			}
 
-			// Extract limit from full leaderboard
-			filtered := extractLimit(fullLeaderboard, limit)
-
-			// Send leaderboard update to client using standard response format
-			sendSSEResponse(c, filtered, "Leaderboard updated")
+			// Send entry delta update to client using standard response format
+			sendSSEResponse(c, entry, "Leaderboard entry updated")
 
 		case <-ticker.C:
 			// Send keep-alive comment
@@ -132,22 +136,6 @@ func sendSSEResponse(c *gin.Context, data interface{}, message string) {
 	messageBytes, _ := json.Marshal(resp)
 	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
 	c.Writer.Flush()
-}
-
-// extractLimit extracts the requested limit from full leaderboard
-func extractLimit(leaderboard *domain.Leaderboard, limit int) *domain.Leaderboard {
-	if leaderboard == nil {
-		return &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
-	}
-
-	if limit >= len(leaderboard.Entries) {
-		return leaderboard
-	}
-
-	return &domain.Leaderboard{
-		Entries: leaderboard.Entries[:limit],
-		Total:   int64(limit),
-	}
 }
 
 // SubmitScore handles score update
@@ -181,7 +169,8 @@ func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 func (h *LeaderboardHandler) RegisterPublicRoutes(router *gin.RouterGroup) {
 	leaderboard := router.Group("/leaderboard")
 	{
-		leaderboard.GET("/stream", h.GetLeaderboard)
+		leaderboard.GET("", h.GetLeaderboardPaginated)
+		leaderboard.GET("/stream", h.GetLeaderboardStream)
 	}
 }
 

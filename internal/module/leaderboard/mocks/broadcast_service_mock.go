@@ -41,60 +41,31 @@ func (m *MockBroadcastService) EXPECT() *MockBroadcastServiceMockRecorder {
 	return m.recorder
 }
 
-// BroadcastLeaderboard mocks base method.
-func (m *MockBroadcastService) BroadcastLeaderboard(ctx context.Context, leaderboard *domain.Leaderboard) error {
+// BroadcastEntryUpdate mocks base method.
+func (m *MockBroadcastService) BroadcastEntryUpdate(ctx context.Context, entry *domain.LeaderboardEntry) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BroadcastLeaderboard", ctx, leaderboard)
+	ret := m.ctrl.Call(m, "BroadcastEntryUpdate", ctx, entry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// BroadcastLeaderboard indicates an expected call of BroadcastLeaderboard.
-func (mr *MockBroadcastServiceMockRecorder) BroadcastLeaderboard(ctx, leaderboard any) *gomock.Call {
+// BroadcastEntryUpdate indicates an expected call of BroadcastEntryUpdate.
+func (mr *MockBroadcastServiceMockRecorder) BroadcastEntryUpdate(ctx, entry any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadcastLeaderboard", reflect.TypeOf((*MockBroadcastService)(nil).BroadcastLeaderboard), ctx, leaderboard)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadcastEntryUpdate", reflect.TypeOf((*MockBroadcastService)(nil).BroadcastEntryUpdate), ctx, entry)
 }
 
-// PublishScoreUpdate mocks base method.
-func (m *MockBroadcastService) PublishScoreUpdate(ctx context.Context) error {
+// SubscribeToEntryUpdates mocks base method.
+func (m *MockBroadcastService) SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishScoreUpdate", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PublishScoreUpdate indicates an expected call of PublishScoreUpdate.
-func (mr *MockBroadcastServiceMockRecorder) PublishScoreUpdate(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishScoreUpdate", reflect.TypeOf((*MockBroadcastService)(nil).PublishScoreUpdate), ctx)
-}
-
-// SubscribeToLeaderboardUpdates mocks base method.
-func (m *MockBroadcastService) SubscribeToLeaderboardUpdates(ctx context.Context) (<-chan *domain.Leaderboard, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToLeaderboardUpdates", ctx)
-	ret0, _ := ret[0].(<-chan *domain.Leaderboard)
+	ret := m.ctrl.Call(m, "SubscribeToEntryUpdates", ctx)
+	ret0, _ := ret[0].(<-chan *domain.LeaderboardEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SubscribeToLeaderboardUpdates indicates an expected call of SubscribeToLeaderboardUpdates.
-func (mr *MockBroadcastServiceMockRecorder) SubscribeToLeaderboardUpdates(ctx any) *gomock.Call {
+// SubscribeToEntryUpdates indicates an expected call of SubscribeToEntryUpdates.
+func (mr *MockBroadcastServiceMockRecorder) SubscribeToEntryUpdates(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToLeaderboardUpdates", reflect.TypeOf((*MockBroadcastService)(nil).SubscribeToLeaderboardUpdates), ctx)
-}
-
-// SubscribeToScoreUpdates mocks base method.
-func (m *MockBroadcastService) SubscribeToScoreUpdates(ctx context.Context) (<-chan struct{}, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToScoreUpdates", ctx)
-	ret0, _ := ret[0].(<-chan struct{})
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SubscribeToScoreUpdates indicates an expected call of SubscribeToScoreUpdates.
-func (mr *MockBroadcastServiceMockRecorder) SubscribeToScoreUpdates(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToScoreUpdates", reflect.TypeOf((*MockBroadcastService)(nil).SubscribeToScoreUpdates), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToEntryUpdates", reflect.TypeOf((*MockBroadcastService)(nil).SubscribeToEntryUpdates), ctx)
 }
