@@ -101,7 +101,7 @@ func TestAuthUseCase_Register_WhenUsernameExists_ShouldReturnConflictError(t *te
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeConflict, appErr.Code)
 	require.Contains(t, appErr.Message, "Username already exists")
@@ -141,7 +141,7 @@ func TestAuthUseCase_Register_WhenEmailExists_ShouldReturnConflictError(t *testi
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeConflict, appErr.Code)
 	require.Contains(t, appErr.Message, "Email already exists")
@@ -177,7 +177,7 @@ func TestAuthUseCase_Register_WhenGetByUsernameFails_ShouldReturnInternalError(t
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 }
@@ -220,7 +220,7 @@ func TestAuthUseCase_Register_WhenCreateFails_ShouldReturnInternalError(t *testi
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 }
@@ -271,7 +271,7 @@ func TestAuthUseCase_Register_WhenGenerateTokenFails_ShouldReturnInternalError(t
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 }
@@ -354,7 +354,7 @@ func TestAuthUseCase_Login_WhenUserNotFound_ShouldReturnUnauthorizedError(t *tes
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "Invalid credentials")
@@ -396,7 +396,7 @@ func TestAuthUseCase_Login_WhenWrongPassword_ShouldReturnUnauthorizedError(t *te
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "Invalid credentials")
@@ -431,7 +431,7 @@ func TestAuthUseCase_Login_WhenGetByUsernameFails_ShouldReturnInternalError(t *t
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 }
@@ -488,7 +488,7 @@ func TestAuthUseCase_ValidateToken_WhenInvalidToken_ShouldReturnUnauthorizedErro
 	require.Error(t, err)
 	require.Empty(t, userID)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "Invalid or expired token")
@@ -522,7 +522,7 @@ func TestAuthUseCase_ValidateToken_WhenUserNotFound_ShouldReturnUnauthorizedErro
 	require.Error(t, err)
 	require.Empty(t, userID)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "User not found")
@@ -590,7 +590,7 @@ func TestAuthUseCase_RefreshToken_WhenInvalidRefreshToken_ShouldReturnUnauthoriz
 	require.Error(t, err)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "Invalid or expired refresh token")
@@ -624,7 +624,7 @@ func TestAuthUseCase_RefreshToken_WhenUserNotFound_ShouldReturnUnauthorizedError
 	require.Error(t, err)
 	require.Nil(t, tokenPair)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeUnauthorized, appErr.Code)
 	require.Contains(t, appErr.Message, "User not found")

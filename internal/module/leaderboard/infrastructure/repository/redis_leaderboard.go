@@ -11,7 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-
 // RedisLeaderboardRepository implements LeaderboardCacheRepository using Redis sorted sets
 type RedisLeaderboardRepository struct {
 	client *redis.Client

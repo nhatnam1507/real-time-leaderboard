@@ -3,16 +3,26 @@ package application
 
 import (
 	"context"
+	"fmt"
 
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/logger"
-	"real-time-leaderboard/internal/shared/response"
 )
 
-// LeaderboardUseCase handles leaderboard use cases
-type LeaderboardUseCase struct {
+//go:generate mockgen -source=leaderboard_usecase.go -destination=../mocks/leaderboard_usecase_mock.go -package=mocks LeaderboardUseCase
+
+// LeaderboardUseCase defines the interface for leaderboard operations
+type LeaderboardUseCase interface {
+	SyncFromPostgres(ctx context.Context) error
+	GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error)
+	GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error)
+	SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error)
+}
+
+// leaderboardUseCase implements LeaderboardUseCase interface
+type leaderboardUseCase struct {
 	cacheRepo        LeaderboardCacheRepository
-	persistenceRepo LeaderboardPersistenceRepository
+	persistenceRepo  LeaderboardPersistenceRepository
 	userRepo         UserRepository
 	broadcastService BroadcastService
 	logger           *logger.Logger
@@ -25,8 +35,8 @@ func NewLeaderboardUseCase(
 	userRepo UserRepository,
 	broadcastService BroadcastService,
 	l *logger.Logger,
-) *LeaderboardUseCase {
-	return &LeaderboardUseCase{
+) *leaderboardUseCase {
+	return &leaderboardUseCase{
 		cacheRepo:        cacheRepo,
 		persistenceRepo:  persistenceRepo,
 		userRepo:         userRepo,
@@ -37,7 +47,7 @@ func NewLeaderboardUseCase(
 
 // SyncFromPostgres syncs all leaderboard entries from PostgreSQL to Redis
 // Called lazily when Redis is empty. UpdateScore doesn't publish, so no broadcasts triggered.
-func (uc *LeaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
+func (uc *leaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
 	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
 	if err != nil || total > 0 {
 		return err
@@ -61,11 +71,11 @@ func (uc *LeaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
 }
 
 // GetFullLeaderboard retrieves the full leaderboard with username enrichment
-func (uc *LeaderboardUseCase) GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error) {
+func (uc *leaderboardUseCase) GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error) {
 	entries, err := uc.cacheRepo.GetTopPlayers(ctx, 1000, 0)
 	if err != nil {
 		uc.logger.Errorf(ctx, "Failed to get full leaderboard: %v", err)
-		return nil, 0, response.NewInternalError("Failed to retrieve leaderboard", err)
+		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
 	}
 
 	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
@@ -81,12 +91,12 @@ func (uc *LeaderboardUseCase) GetFullLeaderboard(ctx context.Context) ([]domain.
 	return entries, total, nil
 }
 
-// GetLeaderboardPaginated retrieves a paginated leaderboard with username enrichment
-func (uc *LeaderboardUseCase) GetLeaderboardPaginated(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
+// GetLeaderboard retrieves a paginated leaderboard with username enrichment
+func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	entries, err := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
 	if err != nil {
 		uc.logger.Errorf(ctx, "Failed to get paginated leaderboard: %v", err)
-		return nil, 0, response.NewInternalError("Failed to retrieve leaderboard", err)
+		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
 	}
 
 	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
@@ -102,7 +112,7 @@ func (uc *LeaderboardUseCase) GetLeaderboardPaginated(ctx context.Context, limit
 	return entries, total, nil
 }
 
-func (uc *LeaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {
+func (uc *leaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -130,6 +140,6 @@ func (uc *LeaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, en
 }
 
 // SubscribeToEntryUpdates subscribes to leaderboard entry delta update broadcasts for SSE handlers
-func (uc *LeaderboardUseCase) SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error) {
+func (uc *leaderboardUseCase) SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error) {
 	return uc.broadcastService.SubscribeToEntryUpdates(ctx)
 }

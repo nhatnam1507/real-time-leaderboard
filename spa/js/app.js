@@ -573,15 +573,15 @@ class App {
         limitSelector.value = savedLimit;
 
         // Handle limit changes
-        limitSelector.addEventListener('change', (e) => {
+        limitSelector.addEventListener('change', async (e) => {
             const newLimit = parseInt(e.target.value, 10);
             if (!isNaN(newLimit) && newLimit > 0) {
                 // Save to localStorage
                 this.setLeaderboardLimit(newLimit);
                 
-                // Reconnect leaderboard with new limit
-                leaderboardManager.disconnect();
-                leaderboardManager.connect(newLimit);
+                // Update limit - calls /leaderboard API with new pagination
+                // Stream stays open (independent)
+                await leaderboardManager.updateLimit(newLimit);
             }
         });
     }

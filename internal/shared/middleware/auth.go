@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 
+	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/response"
 
 	"github.com/gin-gonic/gin"
@@ -18,12 +19,14 @@ const (
 // AuthMiddleware handles authentication
 type AuthMiddleware struct {
 	validateToken func(ctx context.Context, token string) (string, error)
+	logger        *logger.Logger
 }
 
 // NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware(validateToken func(ctx context.Context, token string) (string, error)) *AuthMiddleware {
+func NewAuthMiddleware(validateToken func(ctx context.Context, token string) (string, error), l *logger.Logger) *AuthMiddleware {
 	return &AuthMiddleware{
 		validateToken: validateToken,
+		logger:        l,
 	}
 }
 
@@ -32,13 +35,17 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			response.Error(c, response.NewUnauthorizedError("Authorization header is required"))
+			apiErr := response.NewUnauthorizedError("Authorization header is required")
+			m.logger.Error(c.Request.Context(), apiErr.Error())
+			response.Error(c, apiErr)
 			c.Abort()
 			return
 		}
 
 		if !strings.HasPrefix(authHeader, authHeaderPrefix) {
-			response.Error(c, response.NewUnauthorizedError("Invalid authorization header format"))
+			apiErr := response.NewUnauthorizedError("Invalid authorization header format")
+			m.logger.Error(c.Request.Context(), apiErr.Error())
+			response.Error(c, apiErr)
 			c.Abort()
 			return
 		}
@@ -46,7 +53,9 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		token := strings.TrimPrefix(authHeader, authHeaderPrefix)
 		userID, err := m.validateToken(c.Request.Context(), token)
 		if err != nil {
-			response.Error(c, response.NewUnauthorizedError("Invalid or expired token"))
+			apiErr := response.AsAPIError(err)
+			m.logger.Err(c.Request.Context(), err).Msg("Request error")
+			response.Error(c, apiErr)
 			c.Abort()
 			return
 		}

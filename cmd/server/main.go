@@ -77,8 +77,8 @@ func main() {
 	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(cacheRepo, persistenceRepo, leaderboardUserRepo, broadcastService, l)
 
 	// Initialize handlers
-	authHandler := v1Auth.NewHandler(authUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase)
+	authHandler := v1Auth.NewHandler(authUseCase, l)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase, l)
 
 	// Setup router
 	router := setupRouter(cfg, l, authUseCase, authHandler, leaderboardHandler)
@@ -122,7 +122,7 @@ func main() {
 func setupRouter(
 	cfg *config.Config,
 	l *logger.Logger,
-	authUseCase *authApp.AuthUseCase,
+	authUseCase authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) *gin.Engine {
@@ -156,7 +156,7 @@ func setupRouter(
 func setupAPIRouter(
 	router *gin.Engine,
 	l *logger.Logger,
-	authUseCase *authApp.AuthUseCase,
+	authUseCase authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) {
@@ -196,7 +196,7 @@ func setupAPIRouter(
 	}
 
 	// Protected routes group (auth required)
-	authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken)
+	authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken, l)
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{

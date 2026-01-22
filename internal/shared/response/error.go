@@ -28,40 +28,30 @@ const (
 	CodeTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 )
 
-// AppError represents an application error
-type AppError struct {
+// APIError represents an API error (user-facing only)
+type APIError struct {
 	Code       ErrorCode `json:"code"`
 	Message    string    `json:"message"`
 	HTTPStatus int       `json:"-"`
-	Err        error     `json:"-"`
 }
 
 // Error implements the error interface
-func (e *AppError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Err)
-	}
+func (e *APIError) Error() string {
 	return e.Message
 }
 
-// Unwrap returns the underlying error
-func (e *AppError) Unwrap() error {
-	return e.Err
-}
-
 // NewValidationError creates a new validation error
-func NewValidationError(message string, err error) *AppError {
-	return &AppError{
+func NewValidationError(message string, err error) *APIError {
+	return &APIError{
 		Code:       CodeValidation,
 		Message:    message,
 		HTTPStatus: http.StatusBadRequest,
-		Err:        err,
 	}
 }
 
 // NewNotFoundError creates a new not found error
-func NewNotFoundError(resource string) *AppError {
-	return &AppError{
+func NewNotFoundError(resource string) *APIError {
+	return &APIError{
 		Code:       CodeNotFound,
 		Message:    fmt.Sprintf("%s not found", resource),
 		HTTPStatus: http.StatusNotFound,
@@ -69,11 +59,11 @@ func NewNotFoundError(resource string) *AppError {
 }
 
 // NewUnauthorizedError creates a new unauthorized error
-func NewUnauthorizedError(message string) *AppError {
+func NewUnauthorizedError(message string) *APIError {
 	if message == "" {
 		message = "Unauthorized"
 	}
-	return &AppError{
+	return &APIError{
 		Code:       CodeUnauthorized,
 		Message:    message,
 		HTTPStatus: http.StatusUnauthorized,
@@ -81,11 +71,11 @@ func NewUnauthorizedError(message string) *AppError {
 }
 
 // NewForbiddenError creates a new forbidden error
-func NewForbiddenError(message string) *AppError {
+func NewForbiddenError(message string) *APIError {
 	if message == "" {
 		message = "Forbidden"
 	}
-	return &AppError{
+	return &APIError{
 		Code:       CodeForbidden,
 		Message:    message,
 		HTTPStatus: http.StatusForbidden,
@@ -93,8 +83,8 @@ func NewForbiddenError(message string) *AppError {
 }
 
 // NewConflictError creates a new conflict error
-func NewConflictError(message string) *AppError {
-	return &AppError{
+func NewConflictError(message string) *APIError {
+	return &APIError{
 		Code:       CodeConflict,
 		Message:    message,
 		HTTPStatus: http.StatusConflict,
@@ -102,18 +92,17 @@ func NewConflictError(message string) *AppError {
 }
 
 // NewInternalError creates a new internal server error
-func NewInternalError(message string, err error) *AppError {
-	return &AppError{
+func NewInternalError(message string) *APIError {
+	return &APIError{
 		Code:       CodeInternal,
 		Message:    message,
 		HTTPStatus: http.StatusInternalServerError,
-		Err:        err,
 	}
 }
 
 // NewBadRequestError creates a new bad request error
-func NewBadRequestError(message string) *AppError {
-	return &AppError{
+func NewBadRequestError(message string) *APIError {
+	return &APIError{
 		Code:       CodeBadRequest,
 		Message:    message,
 		HTTPStatus: http.StatusBadRequest,
@@ -121,28 +110,27 @@ func NewBadRequestError(message string) *AppError {
 }
 
 // NewTooManyRequestsError creates a new too many requests error
-func NewTooManyRequestsError(message string) *AppError {
+func NewTooManyRequestsError(message string) *APIError {
 	if message == "" {
 		message = "Too many requests"
 	}
-	return &AppError{
+	return &APIError{
 		Code:       CodeTooManyRequests,
 		Message:    message,
 		HTTPStatus: http.StatusTooManyRequests,
 	}
 }
 
-// IsAppError checks if an error is an AppError
-func IsAppError(err error) bool {
-	_, ok := err.(*AppError)
+// IsAPIError checks if an error is an APIError
+func IsAPIError(err error) bool {
+	_, ok := err.(*APIError)
 	return ok
 }
 
-// AsAppError converts an error to AppError
-func AsAppError(err error) *AppError {
-	if appErr, ok := err.(*AppError); ok {
-		return appErr
+// AsAPIError converts an error to APIError (for internal errors, returns generic message)
+func AsAPIError(err error) *APIError {
+	if apiErr, ok := err.(*APIError); ok {
+		return apiErr
 	}
-	return NewInternalError("Internal server error", err)
+	return NewInternalError("Internal server error")
 }
-

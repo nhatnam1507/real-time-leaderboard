@@ -86,7 +86,7 @@ func TestScoreUseCase_SubmitScore_WhenPersistenceFails_ShouldReturnInternalError
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 	require.Contains(t, appErr.Message, "Failed to update score")

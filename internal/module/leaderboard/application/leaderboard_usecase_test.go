@@ -214,7 +214,7 @@ func TestLeaderboardUseCase_GetFullLeaderboard_WhenGetTopPlayersFails_ShouldRetu
 	require.Nil(t, entries)
 	require.Equal(t, int64(0), total)
 
-	var appErr *response.AppError
+		var appErr *response.APIError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, response.CodeInternal, appErr.Code)
 	require.Contains(t, appErr.Message, "Failed to retrieve leaderboard")

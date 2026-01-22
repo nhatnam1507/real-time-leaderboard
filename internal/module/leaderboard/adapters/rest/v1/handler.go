@@ -8,6 +8,7 @@ import (
 
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
 	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
@@ -23,57 +24,60 @@ const (
 
 // LeaderboardHandler handles HTTP requests for leaderboards and scores
 type LeaderboardHandler struct {
-	leaderboardUseCase *application.LeaderboardUseCase
-	scoreUseCase       *application.ScoreUseCase
+	leaderboardUseCase application.LeaderboardUseCase
+	scoreUseCase       application.ScoreUseCase
+	logger             *logger.Logger
 }
 
 // NewLeaderboardHandler creates a new leaderboard HTTP handler
 func NewLeaderboardHandler(
-	leaderboardUseCase *application.LeaderboardUseCase,
-	scoreUseCase *application.ScoreUseCase,
+	leaderboardUseCase application.LeaderboardUseCase,
+	scoreUseCase application.ScoreUseCase,
+	l *logger.Logger,
 ) *LeaderboardHandler {
 	return &LeaderboardHandler{
 		leaderboardUseCase: leaderboardUseCase,
 		scoreUseCase:       scoreUseCase,
+		logger:             l,
 	}
 }
 
-// GetLeaderboardPaginated handles GET /leaderboard with pagination
-func (h *LeaderboardHandler) GetLeaderboardPaginated(c *gin.Context) {
-	var pagination request.PaginationRequest
+// GetLeaderboard handles GET /leaderboard with pagination
+func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
+	var pagination request.Pagination
 	if err := c.ShouldBindQuery(&pagination); err != nil {
-		response.Error(c, validator.Validate(pagination))
+		valErr := validator.Validate(pagination)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(pagination); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	ctx := c.Request.Context()
-
-	// Sync from PostgreSQL to Redis if needed (lazy loading)
 	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
-	// Normalize pagination
 	normalized := pagination.Normalize()
-	limit := int64(normalized.GetLimit())
-	offset := int64(normalized.GetOffset())
-
-	entries, total, err := h.leaderboardUseCase.GetLeaderboardPaginated(ctx, limit, offset)
+	entries, total, err := h.leaderboardUseCase.GetLeaderboard(ctx, normalized.GetLimit(), normalized.GetOffset())
 	if err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
-	// Create pagination metadata
 	meta := response.NewPagination(normalized.GetOffset(), normalized.GetLimit(), total)
 	response.SuccessWithMeta(c, entries, "Leaderboard retrieved successfully", meta)
 }
 
-// GetLeaderboardStream handles GET /leaderboard/stream via SSE for real-time delta updates
-func (h *LeaderboardHandler) GetLeaderboardStream(c *gin.Context) {
+// GetLeaderboardUpdate handles GET /leaderboard/stream via SSE for real-time delta updates
+func (h *LeaderboardHandler) GetLeaderboardUpdate(c *gin.Context) {
 	// Set headers for SSE
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -116,7 +120,14 @@ func (h *LeaderboardHandler) GetLeaderboardStream(c *gin.Context) {
 			}
 
 			// Send entry delta update to client using standard response format
-			sendSSEResponse(c, entry, "Leaderboard entry updated")
+			resp := response.Response{
+				Success: true,
+				Data:    entry,
+				Message: "Leaderboard entry updated",
+			}
+			messageBytes, _ := json.Marshal(resp)
+			_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
+			c.Writer.Flush()
 
 		case <-ticker.C:
 			// Send keep-alive comment
@@ -126,39 +137,36 @@ func (h *LeaderboardHandler) GetLeaderboardStream(c *gin.Context) {
 	}
 }
 
-// sendSSEResponse sends a standard API response via SSE
-func sendSSEResponse(c *gin.Context, data interface{}, message string) {
-	resp := response.Response{
-		Success: true,
-		Data:    data,
-		Message: message,
-	}
-	messageBytes, _ := json.Marshal(resp)
-	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
-	c.Writer.Flush()
-}
-
 // SubmitScore handles score update
 func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
+		apiErr := response.NewUnauthorizedError("User ID not found in context")
+		h.logger.Error(c.Request.Context(), apiErr.Error())
+		response.Error(c, apiErr)
 		return
 	}
 
 	var req application.SubmitScoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, validator.Validate(req))
+		valErr := validator.Validate(req)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := h.scoreUseCase.SubmitScore(c.Request.Context(), userID, req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
@@ -169,8 +177,8 @@ func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 func (h *LeaderboardHandler) RegisterPublicRoutes(router *gin.RouterGroup) {
 	leaderboard := router.Group("/leaderboard")
 	{
-		leaderboard.GET("", h.GetLeaderboardPaginated)
-		leaderboard.GET("/stream", h.GetLeaderboardStream)
+		leaderboard.GET("", h.GetLeaderboard)
+		leaderboard.GET("/stream", h.GetLeaderboardUpdate)
 	}
 }
 

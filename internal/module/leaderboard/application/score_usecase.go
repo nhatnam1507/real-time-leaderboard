@@ -3,14 +3,21 @@ package application
 
 import (
 	"context"
+	"fmt"
 
 	"real-time-leaderboard/internal/module/leaderboard/domain"
 	"real-time-leaderboard/internal/shared/logger"
-	"real-time-leaderboard/internal/shared/response"
 )
 
-// ScoreUseCase handles score use cases
-type ScoreUseCase struct {
+//go:generate mockgen -source=score_usecase.go -destination=../mocks/score_usecase_mock.go -package=mocks ScoreUseCase
+
+// ScoreUseCase defines the interface for score operations
+type ScoreUseCase interface {
+	SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error
+}
+
+// scoreUseCase implements ScoreUseCase interface
+type scoreUseCase struct {
 	persistenceRepo LeaderboardPersistenceRepository
 	cacheRepo       LeaderboardCacheRepository
 	userRepo        UserRepository
@@ -25,8 +32,8 @@ func NewScoreUseCase(
 	userRepo UserRepository,
 	broadcastService BroadcastService,
 	l *logger.Logger,
-) *ScoreUseCase {
-	return &ScoreUseCase{
+) *scoreUseCase {
+	return &scoreUseCase{
 		persistenceRepo: persistenceRepo,
 		cacheRepo:       cacheRepo,
 		userRepo:        userRepo,
@@ -42,10 +49,10 @@ type SubmitScoreRequest struct {
 
 // SubmitScore upserts the score for a user in both persistence and cache systems.
 // It publishes a leaderboard entry delta update after successful updates.
-func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
+func (uc *scoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
 	if err := uc.persistenceRepo.UpsertScore(ctx, userID, req.Score); err != nil {
 		uc.logger.Errorf(ctx, "Failed to upsert score: %v", err)
-		return response.NewInternalError("Failed to update score", err)
+		return fmt.Errorf("failed to update score: %w", err)
 	}
 
 	if err := uc.cacheRepo.UpdateScore(ctx, userID, req.Score); err != nil {

@@ -24,22 +24,22 @@ type ErrorInfo struct {
 
 // Pagination represents pagination information
 type Pagination struct {
-	Page       int   `json:"page,omitempty"`
-	Limit      int   `json:"limit,omitempty"`
+	Page       int64 `json:"page,omitempty"`
+	Limit      int64 `json:"limit,omitempty"`
 	Total      int64 `json:"total,omitempty"`
-	TotalPages int   `json:"total_pages,omitempty"`
+	TotalPages int64 `json:"total_pages,omitempty"`
 }
 
 // NewPagination creates pagination metadata from offset, limit, and total count
-func NewPagination(offset, limit int, total int64) Pagination {
-	page := 1
+func NewPagination(offset, limit int64, total int64) Pagination {
+	page := int64(1)
 	if limit > 0 {
 		page = (offset / limit) + 1
 	}
 
-	totalPages := 0
+	totalPages := int64(0)
 	if limit > 0 {
-		totalPages = int((total + int64(limit) - 1) / int64(limit))
+		totalPages = (total + limit - 1) / limit
 		if totalPages == 0 && total > 0 {
 			totalPages = 1
 		}
@@ -72,25 +72,13 @@ func SuccessWithStatus(c *gin.Context, status int, data interface{}, message str
 }
 
 // Error sends an error response
-func Error(c *gin.Context, err error) {
-	appErr := AsAppError(err)
-
-	c.JSON(appErr.HTTPStatus, Response{
+// The caller is responsible for logging the error before calling this function
+func Error(c *gin.Context, err *APIError) {
+	c.JSON(err.HTTPStatus, Response{
 		Success: false,
 		Error: &ErrorInfo{
-			Code:    string(appErr.Code),
-			Message: appErr.Message,
-		},
-	})
-}
-
-// ErrorWithStatus sends an error response with custom status code
-func ErrorWithStatus(c *gin.Context, status int, code ErrorCode, message string) {
-	c.JSON(status, Response{
-		Success: false,
-		Error: &ErrorInfo{
-			Code:    string(code),
-			Message: message,
+			Code:    string(err.Code),
+			Message: err.Message,
 		},
 	})
 }

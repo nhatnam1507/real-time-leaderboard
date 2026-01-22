@@ -121,7 +121,7 @@ The system implements JWT-based authentication with automatic token management:
   - `LeaderboardUseCase` - Handles leaderboard queries and enrichment:
     - `SyncFromPostgres()` - Lazy loading from PostgreSQL to Redis
     - `GetFullLeaderboard()` - Fetches full leaderboard and enriches with usernames
-    - `GetLeaderboardPaginated()` - Fetches paginated leaderboard with usernames
+    - `GetLeaderboard()` - Fetches paginated leaderboard with usernames
     - `SubscribeToEntryUpdates()` - Provides subscription channel for entry delta updates
 - **Adapters**: 
   - `LeaderboardHandler` - HTTP handler for score update and leaderboard retrieval
