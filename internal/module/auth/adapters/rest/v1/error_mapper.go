@@ -19,7 +19,7 @@ func toAPIError(err error) *response.APIError {
 	if validator.IsValidationError(err) {
 		var validationErr *validator.ValidationError
 		if errors.As(err, &validationErr) {
-			return response.NewValidationError(validationErr.Message, validationErr.Err)
+			return response.NewValidationError(validationErr.Message)
 		}
 	}
 

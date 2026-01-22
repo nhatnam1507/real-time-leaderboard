@@ -1,7 +1,7 @@
 // Package application provides use cases for the auth module.
 package application
 
-//go:generate mockgen -source=auth_usecase.go -destination=../mocks/jwt_mock.go -package=mocks JWTManager
+//go:generate mockgen -destination=../infrastructure/mocks/jwt_manager_mock.go -package=mocks real-time-leaderboard/internal/module/auth/application JWTManager
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-//go:generate mockgen -source=auth_usecase.go -destination=../mocks/auth_usecase_mock.go -package=mocks AuthUseCase
+//go:generate mockgen -destination=../adapters/mocks/auth_usecase_mock.go -package=mocks real-time-leaderboard/internal/module/auth/application AuthUseCase
 
 // AuthUseCase defines the interface for authentication operations
 type AuthUseCase interface {
@@ -38,6 +38,8 @@ type JWTManager interface {
 }
 
 // NewAuthUseCase creates a new auth use case
+//
+//nolint:revive // unexported-return: intentional design - accept interface, return struct
 func NewAuthUseCase(userRepo UserRepository, jwtMgr JWTManager, l *logger.Logger) *authUseCase {
 	return &authUseCase{
 		userRepo: userRepo,

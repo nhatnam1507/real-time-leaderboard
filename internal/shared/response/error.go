@@ -41,7 +41,7 @@ func (e *APIError) Error() string {
 }
 
 // NewValidationError creates a new validation error
-func NewValidationError(message string, err error) *APIError {
+func NewValidationError(message string) *APIError {
 	return &APIError{
 		Code:       CodeValidation,
 		Message:    message,

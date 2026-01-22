@@ -9,7 +9,7 @@ import (
 	"real-time-leaderboard/internal/shared/logger"
 )
 
-//go:generate mockgen -source=score_usecase.go -destination=../mocks/score_usecase_mock.go -package=mocks ScoreUseCase
+//go:generate mockgen -destination=../adapters/mocks/score_usecase_mock.go -package=mocks real-time-leaderboard/internal/module/leaderboard/application ScoreUseCase
 
 // ScoreUseCase defines the interface for score operations
 type ScoreUseCase interface {
@@ -18,14 +18,16 @@ type ScoreUseCase interface {
 
 // scoreUseCase implements ScoreUseCase interface
 type scoreUseCase struct {
-	persistenceRepo LeaderboardPersistenceRepository
-	cacheRepo       LeaderboardCacheRepository
-	userRepo        UserRepository
+	persistenceRepo  LeaderboardPersistenceRepository
+	cacheRepo        LeaderboardCacheRepository
+	userRepo         UserRepository
 	broadcastService BroadcastService
-	logger          *logger.Logger
+	logger           *logger.Logger
 }
 
 // NewScoreUseCase creates a new score use case
+//
+//nolint:revive // unexported-return: intentional design - accept interface, return struct
 func NewScoreUseCase(
 	persistenceRepo LeaderboardPersistenceRepository,
 	cacheRepo LeaderboardCacheRepository,
@@ -34,11 +36,11 @@ func NewScoreUseCase(
 	l *logger.Logger,
 ) *scoreUseCase {
 	return &scoreUseCase{
-		persistenceRepo: persistenceRepo,
-		cacheRepo:       cacheRepo,
-		userRepo:        userRepo,
+		persistenceRepo:  persistenceRepo,
+		cacheRepo:        cacheRepo,
+		userRepo:         userRepo,
 		broadcastService: broadcastService,
-		logger:          l,
+		logger:           l,
 	}
 }
 

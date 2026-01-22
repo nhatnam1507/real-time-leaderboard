@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"real-time-leaderboard/internal/module/leaderboard/mocks"
+	"real-time-leaderboard/internal/module/leaderboard/infrastructure/mocks"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/response"
 )

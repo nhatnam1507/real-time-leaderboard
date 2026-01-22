@@ -1,13 +1,6 @@
 # Development Guide
 
-## Project Structure Best Practices
-
-1. **Domain Layer**: Contains pure business logic, no external dependencies
-2. **Application Layer**: Orchestrates use cases, depends only on domain interfaces
-3. **Adapters Layer**: Handles HTTP/WebSocket, works with domain entities directly
-4. **Infrastructure Layer**: Implements repository interfaces, handles external services
-
-For detailed architecture and layer structure, see [Architecture](./architecture.md).
+For architecture and layer structure, see [Architecture](./architecture.md).
 
 ## Adding a New Module
 
@@ -73,7 +66,7 @@ make ut
 
 # Generate mocks and other code
 # - Generates all mocks from interface definitions using go generate
-# - Mocks are generated in internal/module/*/mocks/ directories
+# - Mocks are generated in infrastructure/mocks/ and adapters/mocks/ directories
 make code-gen
 
 # Generate and validate OpenAPI specification
@@ -217,16 +210,20 @@ The project uses `go generate` to generate mocks for testing. Mocks are committe
 make code-gen
 ```
 
-This runs `go generate ./...` which processes all `//go:generate` directives in the codebase. Currently, mocks are generated for:
-- `UserRepository` and `JWTManager` interfaces in the auth module
-- `UserRepository`, `LeaderboardPersistenceRepository`, `LeaderboardCacheRepository`, and `BroadcastService` interfaces in the leaderboard module
+This runs `go generate ./...` which processes all `//go:generate` directives in the codebase.
+
+**Mock directives**: Located in application layer files (e.g., `auth_usecase.go`, `repository.go`) with `//go:generate` comments.
 
 **When to regenerate**:
 - After adding or modifying interface methods
 - After changing interface signatures
 - Before committing interface changes (mocks should be committed with code changes)
 
-**Mock location**: Mocks are generated in `internal/module/{module_name}/mocks/` directories at the module level (same level as `application/`, `domain/`, etc.).
+**Mock location**: Mocks are generated in the layer that depends on the interface:
+- Infrastructure layer mocks: `infrastructure/mocks/` (for repository and service interfaces)
+- Adapters layer mocks: `adapters/mocks/` (for use case interfaces)
+
+For details, see [Architecture - Mock Organization](./architecture.md#mock-organization).
 
 ## Git Hooks
 

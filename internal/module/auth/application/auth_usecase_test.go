@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"real-time-leaderboard/internal/module/auth/domain"
-	"real-time-leaderboard/internal/module/auth/mocks"
+	"real-time-leaderboard/internal/module/auth/infrastructure/mocks"
 	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/response"
 )

@@ -196,7 +196,9 @@ func setupAPIRouter(
 	}
 
 	// Protected routes group (auth required)
-	authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken, l)
+	authMiddleware := middleware.NewAuthMiddleware(func(ctx context.Context, token string) (string, error) {
+		return authUseCase.ValidateToken(ctx, token)
+	}, l)
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{

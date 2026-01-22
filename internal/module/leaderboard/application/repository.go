@@ -1,6 +1,6 @@
 package application
 
-//go:generate mockgen -source=repository.go -destination=../mocks/repository_mock.go -package=mocks UserRepository,LeaderboardPersistenceRepository,LeaderboardCacheRepository
+//go:generate mockgen -destination=../infrastructure/mocks/repository_mock.go -package=mocks real-time-leaderboard/internal/module/leaderboard/application UserRepository,LeaderboardPersistenceRepository,LeaderboardCacheRepository
 
 import (
 	"context"

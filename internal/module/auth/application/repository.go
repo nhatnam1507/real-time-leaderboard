@@ -1,7 +1,7 @@
 // Package application provides use cases for the auth module.
 package application
 
-//go:generate mockgen -source=repository.go -destination=../mocks/repository_mock.go -package=mocks UserRepository
+//go:generate mockgen -destination=../infrastructure/mocks/user_repository_mock.go -package=mocks real-time-leaderboard/internal/module/auth/application UserRepository
 
 import (
 	"context"

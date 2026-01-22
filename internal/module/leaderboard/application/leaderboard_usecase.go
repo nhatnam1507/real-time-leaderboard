@@ -9,7 +9,7 @@ import (
 	"real-time-leaderboard/internal/shared/logger"
 )
 
-//go:generate mockgen -source=leaderboard_usecase.go -destination=../mocks/leaderboard_usecase_mock.go -package=mocks LeaderboardUseCase
+//go:generate mockgen -destination=../adapters/mocks/leaderboard_usecase_mock.go -package=mocks real-time-leaderboard/internal/module/leaderboard/application LeaderboardUseCase
 
 // LeaderboardUseCase defines the interface for leaderboard operations
 type LeaderboardUseCase interface {
@@ -29,6 +29,8 @@ type leaderboardUseCase struct {
 }
 
 // NewLeaderboardUseCase creates a new leaderboard use case
+//
+//nolint:revive // unexported-return: intentional design - accept interface, return struct
 func NewLeaderboardUseCase(
 	cacheRepo LeaderboardCacheRepository,
 	persistenceRepo LeaderboardPersistenceRepository,

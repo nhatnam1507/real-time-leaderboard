@@ -1,7 +1,7 @@
 // Package application provides use cases for the leaderboard module.
 package application
 
-//go:generate mockgen -source=broadcast_service.go -destination=../mocks/broadcast_service_mock.go -package=mocks BroadcastService
+//go:generate mockgen -destination=../infrastructure/mocks/broadcast_service_mock.go -package=mocks real-time-leaderboard/internal/module/leaderboard/application BroadcastService
 
 import (
 	"context"
