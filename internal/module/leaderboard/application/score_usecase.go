@@ -49,17 +49,16 @@ type SubmitScoreRequest struct {
 	Score int64 `json:"score" validate:"required,gte=0" example:"1000"`
 }
 
-// SubmitScore upserts the score for a user in both persistence and cache systems.
-// It publishes a leaderboard entry delta update after successful updates.
+// SubmitScore upserts the score for a user using write-through: updates cache first, then persistence.
+// Both must succeed for a successful response. Broadcast is best-effort after both succeed.
 func (uc *scoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
+	if err := uc.cacheRepo.UpdateScore(ctx, userID, req.Score); err != nil {
+		uc.logger.Errorf(ctx, "Failed to update cache: %v", err)
+		return fmt.Errorf("failed to update score: %w", err)
+	}
 	if err := uc.persistenceRepo.UpsertScore(ctx, userID, req.Score); err != nil {
 		uc.logger.Errorf(ctx, "Failed to upsert score: %v", err)
 		return fmt.Errorf("failed to update score: %w", err)
-	}
-
-	if err := uc.cacheRepo.UpdateScore(ctx, userID, req.Score); err != nil {
-		uc.logger.Errorf(ctx, "Failed to update cache: %v", err)
-		return nil
 	}
 
 	// Get user's rank after update

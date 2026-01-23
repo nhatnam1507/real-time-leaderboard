@@ -18,17 +18,18 @@ func TestScoreUseCase_SubmitScore_WhenValidRequest_ShouldUpdateScoreAndBroadcast
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-123", int64(1000)).
+		Return(nil).
+		Times(1)
+
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
 		UpsertScore(ctx, "user-123", int64(1000)).
 		Return(nil).
 		Times(1)
 
-	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
-	mockCacheRepo.EXPECT().
-		UpdateScore(ctx, "user-123", int64(1000)).
-		Return(nil).
-		Times(1)
 	mockCacheRepo.EXPECT().
 		GetUserRank(ctx, "user-123").
 		Return(int64(1), nil).
@@ -64,13 +65,18 @@ func TestScoreUseCase_SubmitScore_WhenPersistenceFails_ShouldReturnInternalError
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-123", int64(1000)).
+		Return(nil).
+		Times(1)
+
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
 		UpsertScore(ctx, "user-123", int64(1000)).
 		Return(errors.New("database error")).
 		Times(1)
 
-	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
@@ -88,17 +94,11 @@ func TestScoreUseCase_SubmitScore_WhenPersistenceFails_ShouldReturnInternalError
 	require.Contains(t, err.Error(), "database error")
 }
 
-func TestScoreUseCase_SubmitScore_WhenCacheUpdateFails_ShouldReturnNilError(t *testing.T) {
+func TestScoreUseCase_SubmitScore_WhenCacheUpdateFails_ShouldReturnError(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
-	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
-	mockPersistenceRepo.EXPECT().
-		UpsertScore(ctx, "user-123", int64(1000)).
-		Return(nil).
-		Times(1)
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
@@ -106,6 +106,7 @@ func TestScoreUseCase_SubmitScore_WhenCacheUpdateFails_ShouldReturnNilError(t *t
 		Return(errors.New("redis error")).
 		Times(1)
 
+	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
@@ -118,7 +119,9 @@ func TestScoreUseCase_SubmitScore_WhenCacheUpdateFails_ShouldReturnNilError(t *t
 	err := uc.SubmitScore(ctx, "user-123", req)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.NoError(t, err) // Cache failure is non-critical, returns nil
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to update score")
+	require.Contains(t, err.Error(), "redis error")
 }
 
 func TestScoreUseCase_SubmitScore_WhenBroadcastFails_ShouldReturnNilError(t *testing.T) {
@@ -127,17 +130,18 @@ func TestScoreUseCase_SubmitScore_WhenBroadcastFails_ShouldReturnNilError(t *tes
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-123", int64(1000)).
+		Return(nil).
+		Times(1)
+
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
 		UpsertScore(ctx, "user-123", int64(1000)).
 		Return(nil).
 		Times(1)
 
-	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
-	mockCacheRepo.EXPECT().
-		UpdateScore(ctx, "user-123", int64(1000)).
-		Return(nil).
-		Times(1)
 	mockCacheRepo.EXPECT().
 		GetUserRank(ctx, "user-123").
 		Return(int64(1), nil).
@@ -173,17 +177,18 @@ func TestScoreUseCase_SubmitScore_WhenRankOutsideBroadcastRange_ShouldNotBroadca
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-123", int64(1000)).
+		Return(nil).
+		Times(1)
+
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
 		UpsertScore(ctx, "user-123", int64(1000)).
 		Return(nil).
 		Times(1)
 
-	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
-	mockCacheRepo.EXPECT().
-		UpdateScore(ctx, "user-123", int64(1000)).
-		Return(nil).
-		Times(1)
 	mockCacheRepo.EXPECT().
 		GetUserRank(ctx, "user-123").
 		Return(int64(1500), nil). // Rank outside MaxBroadcastRank (1000)

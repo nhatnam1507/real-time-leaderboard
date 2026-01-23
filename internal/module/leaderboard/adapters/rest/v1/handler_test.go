@@ -30,10 +30,6 @@ func TestLeaderboardHandler_GetLeaderboard_WhenValidQuery_ShouldReturn200WithEnt
 	mockScore := lbmocks.NewMockScoreUseCase(ctrl)
 
 	mockLB.EXPECT().
-		SyncFromPostgres(gomock.Any()).
-		Return(nil).
-		Times(1)
-	mockLB.EXPECT().
 		GetLeaderboard(gomock.Any(), int64(10), int64(0)).
 		Return(
 			[]domain.LeaderboardEntry{
@@ -72,7 +68,6 @@ func TestLeaderboardHandler_GetLeaderboard_WhenInvalidPagination_ShouldReturn400
 
 	mockLB := lbmocks.NewMockLeaderboardUseCase(ctrl)
 	mockScore := lbmocks.NewMockScoreUseCase(ctrl)
-	mockLB.EXPECT().SyncFromPostgres(gomock.Any()).Times(0)
 	mockLB.EXPECT().GetLeaderboard(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	w := httptest.NewRecorder()
@@ -102,10 +97,6 @@ func TestLeaderboardHandler_GetLeaderboard_WhenUseCaseReturnsError_ShouldReturn5
 	mockLB := lbmocks.NewMockLeaderboardUseCase(ctrl)
 	mockScore := lbmocks.NewMockScoreUseCase(ctrl)
 
-	mockLB.EXPECT().
-		SyncFromPostgres(gomock.Any()).
-		Return(nil).
-		Times(1)
 	mockLB.EXPECT().
 		GetLeaderboard(gomock.Any(), int64(10), int64(0)).
 		Return(nil, int64(0), errUseCase).
@@ -161,7 +152,7 @@ func TestLeaderboardHandler_SubmitScore_WhenUserIDInContextAndValidBody_ShouldRe
 	require.Equal(t, "Score updated successfully", body.Message)
 }
 
-func TestLeaderboardHandler_SubmitScore_WhenUserIDNotInContext_ShouldReturn401(t *testing.T) {
+func TestLeaderboardHandler_SubmitScore_WhenUserIDNotInContext_ShouldReturn500(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	gin.SetMode(gin.TestMode)
 	ctrl := gomock.NewController(t)
@@ -175,7 +166,7 @@ func TestLeaderboardHandler_SubmitScore_WhenUserIDNotInContext_ShouldReturn401(t
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPut, "/leaderboard/score", bytes.NewBufferString(`{"score":1000}`))
 	c.Request.Header.Set("Content-Type", "application/json")
-	// do not set user_id
+	// do not set user_id (auth middleware would have set it; this simulates a server-side bug)
 
 	h := NewLeaderboardHandler(mockLB, mockScore, logger.New("info", false))
 
@@ -183,12 +174,12 @@ func TestLeaderboardHandler_SubmitScore_WhenUserIDNotInContext_ShouldReturn401(t
 	h.SubmitScore(c)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
 	var body response.Response
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.False(t, body.Success)
-	require.Equal(t, string(response.CodeUnauthorized), body.Error.Code)
-	require.Contains(t, body.Error.Message, "User ID not found")
+	require.Equal(t, string(response.CodeInternal), body.Error.Code)
+	require.Contains(t, body.Error.Message, "unexpected error")
 }
 
 func TestLeaderboardHandler_SubmitScore_WhenMissingRequiredFields_ShouldReturn400(t *testing.T) {

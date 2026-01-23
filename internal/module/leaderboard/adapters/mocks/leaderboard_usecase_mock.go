@@ -41,22 +41,6 @@ func (m *MockLeaderboardUseCase) EXPECT() *MockLeaderboardUseCaseMockRecorder {
 	return m.recorder
 }
 
-// GetFullLeaderboard mocks base method.
-func (m *MockLeaderboardUseCase) GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFullLeaderboard", ctx)
-	ret0, _ := ret[0].([]domain.LeaderboardEntry)
-	ret1, _ := ret[1].(int64)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetFullLeaderboard indicates an expected call of GetFullLeaderboard.
-func (mr *MockLeaderboardUseCaseMockRecorder) GetFullLeaderboard(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullLeaderboard", reflect.TypeOf((*MockLeaderboardUseCase)(nil).GetFullLeaderboard), ctx)
-}
-
 // GetLeaderboard mocks base method.
 func (m *MockLeaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	m.ctrl.T.Helper()
@@ -86,18 +70,4 @@ func (m *MockLeaderboardUseCase) SubscribeToEntryUpdates(ctx context.Context) (<
 func (mr *MockLeaderboardUseCaseMockRecorder) SubscribeToEntryUpdates(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToEntryUpdates", reflect.TypeOf((*MockLeaderboardUseCase)(nil).SubscribeToEntryUpdates), ctx)
-}
-
-// SyncFromPostgres mocks base method.
-func (m *MockLeaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncFromPostgres", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SyncFromPostgres indicates an expected call of SyncFromPostgres.
-func (mr *MockLeaderboardUseCaseMockRecorder) SyncFromPostgres(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncFromPostgres", reflect.TypeOf((*MockLeaderboardUseCase)(nil).SyncFromPostgres), ctx)
 }

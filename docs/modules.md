@@ -108,64 +108,50 @@ The system implements JWT-based authentication with automatic token management:
 
 **Purpose**: Score update and real-time leaderboard queries via Server-Sent Events (SSE)
 
+**Data layer**: PostgreSQL = persistence; Redis = cache. All cache/persistence logic lives in use cases; handlers only invoke use cases.
+
 **Components**:
 - **Domain**: `LeaderboardEntry` (`domain/leaderboard.go`), constants (`domain/constants.go`)
-- **Application**: 
-  - `LeaderboardUseCase` - `SyncFromPostgres()`, `GetLeaderboard(limit, offset int64)`, `GetFullLeaderboard()` (internal), `SubscribeToEntryUpdates()`
-  - `ScoreUseCase` - `SubmitScore()` (updates persistence/cache, broadcasts if rank <= 1000)
-  - Repository interfaces: `LeaderboardPersistenceRepository`, `LeaderboardCacheRepository`, `UserRepository` (module-owned)
-  - `BroadcastService` interface
-- **Adapters**: HTTP handlers (`adapters/rest/v1/handler.go`), error mapper (`adapters/rest/v1/error_mapper.go`)
-- **Infrastructure**: PostgreSQL/Redis repositories, Redis broadcast service
-
-For architectural details, see [Architecture](./architecture.md).
+- **Application**:
+  - `LeaderboardUseCase` - `GetLeaderboard(limit, offset)`, `SubscribeToEntryUpdates()`
+  - `ScoreUseCase` - `SubmitScore()` (write-through: cache then persistence; broadcasts if rank ≤ 1000)
+  - Repository interfaces: `LeaderboardPersistenceRepository`, `LeaderboardCacheRepository`, `UserRepository` (module-owned), `BroadcastService`
+- **Adapters**: HTTP handlers, error mapper
+- **Infrastructure**: PostgreSQL (persistence) and Redis (cache) repositories, Redis broadcast service
 
 **Endpoints**:
-- `GET /api/v1/leaderboard?limit=10&offset=0` - Get paginated leaderboard (for initial dashboard load and Top N changes)
-- `GET /api/v1/leaderboard/stream` - SSE stream for real-time entry delta updates (stays open, independent of pagination)
-- `PUT /api/v1/leaderboard/score` - Update score (authenticated)
+- `GET /api/v1/leaderboard?limit=10&offset=0` - Paginated leaderboard (read-through: cache first, PostgreSQL on miss)
+- `GET /api/v1/leaderboard/stream` - SSE stream for entry deltas only (pubsub, no cache/persistence reads)
+- `PUT /api/v1/leaderboard/score` - Update score (write-through; requires auth)
 
-**Module Independence**: Owns its `UserRepository` interface (no dependency on auth module). For details on module independence, see [Architecture - Module Independence](./architecture.md#module-independence).
+**Module Independence**: Owns its `UserRepository` interface (no dependency on auth module). See [Architecture - Module Independence](./architecture.md#module-independence).
 
-### Score Update Flow
+### Score Update Flow (write-through)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant API
-    participant Storage
     participant Cache
+    participant Storage
     participant Broadcast
     participant Viewers
     
     User->>API: Update score (authenticated)
-    API->>Storage: Save score
-    Storage-->>API: Score saved
-    API->>Cache: Update ranking
-    Cache-->>API: Ranking updated
+    API->>Cache: Update score
+    Cache-->>API: OK
+    API->>Storage: Upsert score
+    Storage-->>API: OK
     API->>Cache: Get user rank
     Cache-->>API: Rank
-    
-    alt Rank <= MaxBroadcastRank (1000)
+    alt Rank <= 1000
         API->>Storage: Get username
         Storage-->>API: Username
-        API->>Broadcast: Broadcast entry delta
-        Broadcast->>Viewers: Push entry update
-    else Rank > MaxBroadcastRank
-        Note over API: Skip broadcast (optimization)
+        API->>Broadcast: Publish entry delta
+        Broadcast->>Viewers: SSE
     end
-    
-    API-->>User: Score updated successfully
+    API-->>User: 200 OK
 ```
-
-**What Happens**:
-1. Authenticated user submits new score
-2. Score saved to PostgreSQL, ranking updated in Redis
-3. If rank <= 1000: fetch username, create entry delta, broadcast via pub/sub
-4. All connected viewers receive entry update via SSE and merge into local state
-5. User receives confirmation
-
-**Optimization**: Only entries ranked within top 1000 are broadcasted to reduce network traffic.
 
 ### Leaderboard Viewing Flow
 
@@ -173,85 +159,49 @@ sequenceDiagram
 sequenceDiagram
     participant Viewer
     participant API
+    participant UC as Use case
     participant Cache
     participant Storage
     participant Broadcast
     
-    Note over Viewer: Initial Dashboard Load
+    Note over Viewer: GET /leaderboard (read-through)
     Viewer->>API: GET /leaderboard?limit=10&offset=0
-    API->>Cache: Check total count
-    Cache-->>API: Total count
-    alt Cache empty (total = 0)
-        Note over API,Storage: Lazy Loading: Sync from PostgreSQL
-        API->>Storage: Load all scores with usernames
-        Storage-->>API: Score entries
-        API->>Cache: Populate cache (silent, no broadcasts)
+    API->>UC: GetLeaderboard(limit, offset)
+    UC->>Cache: GetTotalPlayers
+    Cache-->>UC: total
+    alt total > 0
+        UC->>Cache: GetTopPlayers
+        Cache-->>UC: entries
+        UC->>UC: Enrich usernames
+    else total = 0
+        UC->>Storage: GetLeaderboard
+        Storage-->>UC: entries
+        UC->>Cache: Backfill (UpdateScore per entry)
+        UC->>UC: Paginate in memory
     end
-    API->>Cache: Get top N entries
-    Cache-->>API: Entries (userID, score, rank)
-    API->>Cache: Get total count
-    Cache-->>API: Total
-    API->>Storage: Batch fetch usernames
-    Storage-->>API: Username data
-    API->>API: Enrich entries with usernames
-    API-->>Viewer: Response with pagination meta
+    UC-->>API: entries, total
+    API-->>Viewer: 200 + pagination meta
     
-    Note over Viewer: Real-Time Delta Updates
-    Viewer->>API: GET /leaderboard/stream (SSE)
-    API->>Cache: Check total count
-    alt Cache empty
-        API->>Storage: Load all scores
-        Storage-->>API: Score entries
-        API->>Cache: Populate cache (silent)
+    Note over Viewer: GET /leaderboard/stream (pubsub only)
+    Viewer->>API: GET /leaderboard/stream
+    API->>UC: SubscribeToEntryUpdates
+    UC->>Broadcast: Subscribe
+    loop deltas
+        Broadcast-->>Viewer: SSE entry
     end
-    API->>Broadcast: Subscribe to entry deltas
-    Broadcast-->>Viewer: Entry delta updates (SSE)
-    
-    Note over Cache,Viewer: When score is updated (rank <= 1000)...
-    Cache->>Broadcast: Entry delta published
-    Broadcast->>Viewer: Single entry update
-    Viewer->>Viewer: Merge into local state
-    Viewer->>Viewer: Re-render top N
 ```
 
-**What Happens**:
+**Behavior**:
+- **GET /leaderboard**: Read-through. Use case: if cache has data → `GetTopPlayers` + enrich; if cache empty → `GetLeaderboard` from PostgreSQL, backfill cache, return paginated. Handler only calls `GetLeaderboard(limit, offset)`.
+- **GET /leaderboard/stream**: Pubsub only. Use case: `SubscribeToEntryUpdates` (no cache or persistence). Handler: set SSE headers, call `SubscribeToEntryUpdates`, loop on channel. Clients must load initial state via GET /leaderboard first.
+- **PUT /leaderboard/score**: Write-through. Use case: `UpdateScore` (cache) then `UpsertScore` (persistence); both must succeed. Then get rank, optionally broadcast if rank ≤ 1000.
 
-1. **Initial Dashboard Load**:
-   - Client calls `GET /leaderboard?limit=10&offset=0`
-   - If cache empty: lazy load from PostgreSQL to Redis (silent, no broadcasts)
-   - Retrieve top N from cache, batch fetch usernames, enrich entries
-   - Return entries with pagination metadata
+**Characteristics**: Read-through and write-through; stream is pubsub-only; broadcast only for rank ≤ 1000; `/leaderboard` and `/leaderboard/stream` are independent.
 
-2. **Real-Time Delta Updates**:
-   - Client connects to `GET /leaderboard/stream` (SSE) - **stays open**
-   - Subscribe to entry delta updates via broadcast service
-   - When score updated (rank <= 1000): single entry delta broadcasted, all viewers receive via SSE
-   - Clients merge updates into local state and re-render
+### Infrastructure
 
-3. **Changing Top N**:
-   - Client calls `GET /leaderboard?limit=50&offset=0` with new pagination
-   - **Stream stays open** - only `/leaderboard` API called
-   - Stream continues providing delta updates independently
+**Redis (cache)**:
+- Sorted set `leaderboard:global`: score, member=userID. `ZADD`, `ZREVRANGE`, `ZCARD`.
+- Pub/sub `leaderboard:viewer:updates`: entry-delta JSON. Only rank ≤ 1000 triggers publish.
 
-**Key Characteristics**:
-- Lazy loading: Auto-syncs from PostgreSQL when cache empty
-- Real-time: Immediate updates via SSE (rank <= 1000)
-- Efficient: Single broadcast updates all viewers via Redis pub/sub
-- Scalable: Works across multiple server instances
-- Independent: `/leaderboard` (pagination) and `/leaderboard/stream` (delta updates) operate separately
-
-### Infrastructure Implementation Details
-
-#### Redis Storage Strategy
-
-**Sorted Sets for Leaderboard Storage**:
-- Key: `leaderboard:global` (single global leaderboard)
-- Score: User's total score (as Redis score)
-- Member: User ID
-- Commands: `ZADD` (update/add), `ZREVRANGE` (get top N), `ZCARD` (total players)
-- Performance: O(log(N)) complexity for insertions, O(log(N)+M) for range queries
-- All operations are atomic, no application-level locking needed
-
-**Pub/Sub for Real-Time Notifications**:
-- Topic: `leaderboard:viewer:updates` - Single entry delta updates (LeaderboardEntry JSON)
-- MaxBroadcastRank: 1000 - Only top 1000 entries trigger broadcasts
+**PostgreSQL (persistence)**: `leaderboard` table; `UpsertScore`, `GetLeaderboard` (with usernames).
