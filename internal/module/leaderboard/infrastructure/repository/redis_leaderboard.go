@@ -11,14 +11,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-
-// RedisLeaderboardRepository implements LeaderboardRepository using Redis sorted sets
+// RedisLeaderboardRepository implements LeaderboardCacheRepository using Redis sorted sets
 type RedisLeaderboardRepository struct {
 	client *redis.Client
 }
 
-// NewRedisLeaderboardRepository creates a new Redis leaderboard repository
-func NewRedisLeaderboardRepository(client *redis.Client) application.LeaderboardRepository {
+// NewRedisLeaderboardRepository creates a new Redis leaderboard cache repository
+func NewRedisLeaderboardRepository(client *redis.Client) application.LeaderboardCacheRepository {
 	return &RedisLeaderboardRepository{client: client}
 }
 
@@ -72,4 +71,19 @@ func (r *RedisLeaderboardRepository) GetTotalPlayers(ctx context.Context) (int64
 	}
 
 	return count, nil
+}
+
+// GetUserRank retrieves the rank of a user in the leaderboard (1-indexed)
+func (r *RedisLeaderboardRepository) GetUserRank(ctx context.Context, userID string) (int64, error) {
+	rank, err := r.client.ZRevRank(ctx, domain.RedisLeaderboardKey, userID).Result()
+	if err != nil {
+		if err == redis.Nil {
+			// User not found in leaderboard
+			return 0, fmt.Errorf("user not found in leaderboard")
+		}
+		return 0, fmt.Errorf("failed to get user rank: %w", err)
+	}
+
+	// ZRevRank returns 0-based rank, convert to 1-based
+	return rank + 1, nil
 }

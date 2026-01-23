@@ -2,15 +2,31 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"real-time-leaderboard/internal/shared/response"
 )
 
 var validate *validator.Validate
+
+// ValidationError represents a validation error
+type ValidationError struct {
+	Message string
+	Err     error
+}
+
+// Error implements the error interface
+func (e *ValidationError) Error() string {
+	return e.Message
+}
+
+// Unwrap returns the underlying error
+func (e *ValidationError) Unwrap() error {
+	return e.Err
+}
 
 func init() {
 	validate = validator.New()
@@ -41,9 +57,21 @@ func formatValidationError(err error) error {
 			message := formatFieldError(fieldError)
 			messages = append(messages, message)
 		}
-		return response.NewValidationError(strings.Join(messages, "; "), err)
+		return &ValidationError{
+			Message: strings.Join(messages, "; "),
+			Err:     err,
+		}
 	}
-	return response.NewValidationError("Validation failed", err)
+	return &ValidationError{
+		Message: "Validation failed",
+		Err:     err,
+	}
+}
+
+// IsValidationError checks if an error is a ValidationError
+func IsValidationError(err error) bool {
+	var validationErr *ValidationError
+	return errors.As(err, &validationErr)
 }
 
 // formatFieldError formats a single field error

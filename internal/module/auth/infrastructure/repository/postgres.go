@@ -27,19 +27,17 @@ func NewPostgresUserRepository(pool *pgxpool.Pool) application.UserRepository {
 // Create creates a new user
 func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) error {
 	dto := &User{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		Password:  user.Password,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Password: user.Password,
 	}
 
 	if dto.ID == "" {
 		dto.ID = uuid.New().String()
 	}
 	now := time.Now()
-	// Always set created_at to current time on creation (never update it afterwards)
+	// Timestamps are infrastructure concerns, handled in DTO only
 	dto.CreatedAt = now
 	dto.UpdatedAt = now
 
@@ -61,10 +59,8 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Update domain entity with generated values
+	// Update domain entity with generated ID only (timestamps stay in infrastructure)
 	user.ID = dto.ID
-	user.CreatedAt = dto.CreatedAt
-	user.UpdatedAt = dto.UpdatedAt
 
 	return nil
 }
@@ -95,12 +91,11 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 	}
 
 	return &domain.User{
-		ID:        dto.ID,
-		Username:  dto.Username,
-		Email:     dto.Email,
-		Password:  dto.Password,
-		CreatedAt: dto.CreatedAt,
-		UpdatedAt: dto.UpdatedAt,
+		ID:       dto.ID,
+		Username: dto.Username,
+		Email:    dto.Email,
+		Password: dto.Password,
+		// Timestamps are infrastructure concerns, not part of domain entity
 	}, nil
 }
 
@@ -130,12 +125,11 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, username str
 	}
 
 	return &domain.User{
-		ID:        dto.ID,
-		Username:  dto.Username,
-		Email:     dto.Email,
-		Password:  dto.Password,
-		CreatedAt: dto.CreatedAt,
-		UpdatedAt: dto.UpdatedAt,
+		ID:       dto.ID,
+		Username: dto.Username,
+		Email:    dto.Email,
+		Password: dto.Password,
+		// Timestamps are infrastructure concerns, not part of domain entity
 	}, nil
 }
 
@@ -165,23 +159,22 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, email string) (
 	}
 
 	return &domain.User{
-		ID:        dto.ID,
-		Username:  dto.Username,
-		Email:     dto.Email,
-		Password:  dto.Password,
-		CreatedAt: dto.CreatedAt,
-		UpdatedAt: dto.UpdatedAt,
+		ID:       dto.ID,
+		Username: dto.Username,
+		Email:    dto.Email,
+		Password: dto.Password,
+		// Timestamps are infrastructure concerns, not part of domain entity
 	}, nil
 }
 
 // Update updates a user
 func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) error {
 	dto := &User{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		Password:  user.Password,
-		CreatedAt: user.CreatedAt,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Password: user.Password,
+		// Timestamps are infrastructure concerns, handled in DTO only
 		UpdatedAt: time.Now(),
 	}
 
@@ -203,8 +196,7 @@ func (r *PostgresUserRepository) Update(ctx context.Context, user *domain.User) 
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// Update domain entity with new timestamp
-	user.UpdatedAt = dto.UpdatedAt
+	// Domain entity doesn't need timestamp updates (infrastructure concern)
 
 	return nil
 }

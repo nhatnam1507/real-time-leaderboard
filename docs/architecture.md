@@ -5,6 +5,11 @@ This document describes the architectural principles, project structure, and cod
 ## Clean Architecture Principles
 
 The system follows **Clean Architecture** principles to achieve maintainability, testability, and independence of business logic from frameworks and infrastructure.
+In Clean Architecture:
+- Interfaces are defined inward
+- Mocks live outward
+- Dependencies point inward only
+That rule alone prevents 90% of cyclic imports.
 
 ### Core Principles
 
@@ -79,15 +84,7 @@ real-time-leaderboard/
 
 ## Module Organization
 
-Each module is self-contained and follows a consistent structure with four layers:
-
-```
-module/
-├── domain/          # Business entities and domain services (if needed)
-├── application/     # Use cases, business logic orchestration, and repository interfaces
-├── adapters/        # HTTP handlers and external interface adapters
-└── infrastructure/  # Repository implementations and external services
-```
+Each module is self-contained with four layers (see [Project Structure](#project-structure) above for full structure):
 
 **Key Points**:
 - Each module is independent - no cross-module imports
@@ -119,67 +116,53 @@ The architecture consists of four concentric layers, each with specific responsi
 **Purpose**: Contains pure business logic and core business objects
 
 **Contains**: 
-- Domain entities (business concepts only, no infrastructure concerns)
-- Domain services (if needed for complex business logic)
-- Domain constants (e.g., Redis keys, topics)
+- Domain entities (one file per entity, no timestamps/infrastructure fields)
+- Domain errors (sentinel errors)
+- Domain constants (Redis keys, topics)
 
 **Rules**:
-- **Zero external dependencies** - no imports from other layers
-- No database IDs, timestamps, or infrastructure concerns
-- No repository interfaces - these belong to the application layer
-- Pure Go code - no framework dependencies
-- Contains only core business objects and domain logic
+- Zero external dependencies
+- No repository interfaces (belong in application layer)
+- Pure business objects only
 
 ### Application Layer (`application/`)
 
 **Purpose**: Orchestrates business logic and use cases
 
 **Contains**:
-- Use case structs and methods
-- Repository interfaces (application needs, not domain concepts)
-- Business logic orchestration
-- Data enrichment (combining data from multiple sources)
+- Use cases, repository interfaces, service interfaces (pub/sub, messaging)
+- Business logic orchestration and data enrichment
 
 **Rules**:
 - Depends only on domain layer
-- Defines repository interfaces that represent application needs
-- Defines service interfaces for external systems (pub/sub, messaging, etc.)
-- No direct infrastructure access - uses repository and service interfaces
-- Contains business logic, not infrastructure details
-- Can call multiple repositories to compose results
+- Defines interfaces (repositories, services) - implemented in infrastructure
+- Orchestrates business logic via interfaces
 
 ### Adapters Layer (`adapters/`)
 
 **Purpose**: Translates external requests into domain operations
 
 **Contains**:
-- HTTP handlers (REST API)
-- Request/response transformation
-- Connection lifecycle management (e.g., SSE)
+- HTTP handlers, error mappers, request/response transformation
+- Connection lifecycle management (SSE, WebSocket)
 
 **Rules**:
-- No business logic - delegates to application layer
-- Handles protocol-specific concerns (HTTP, SSE, WebSocket)
-- Transforms external formats to domain entities
-- Manages connection lifecycle only
+- Delegates business logic to application layer
+- Handles protocol concerns only (HTTP headers, SSE lifecycle)
+- Maps errors to APIError via module-specific error mappers
 
 ### Infrastructure Layer (`infrastructure/`)
 
 **Purpose**: Implements technical details and external integrations
 
 **Contains**:
-- Repository implementations (PostgreSQL, Redis)
-- Service implementations (Redis pub/sub, messaging, etc.)
-- DTOs (Data Transfer Objects) for database operations
-- External service clients
+- Repository implementations, service implementations (pub/sub, messaging)
+- DTOs (with `db` tags, unexported)
 
 **Rules**:
-- Implements application repository interfaces
-- Implements application service interfaces (e.g., BroadcastService)
-- Uses DTOs internally (with `db` tags, not `json` tags)
+- Implements application layer interfaces
 - Maps DTOs to domain objects when returning
 - Database concerns (IDs, timestamps) stay here
-- Infrastructure-specific details (Redis commands, pub/sub) stay here
 
 ## Dependency Rules
 
@@ -212,188 +195,171 @@ These follow dependency inversion - modules depend on abstractions, not concrete
 
 ### File Organization
 
-- **Domain entities**: One file per entity or related entities (e.g., `leaderboard.go`)
+**Naming Conventions**:
+- **Domain entities**: One file per entity (e.g., `user.go`, `token.go`, `leaderboard_entry.go`)
+- **Domain errors**: `errors.go` in domain layer
 - **Repository interfaces**: Grouped in `application/repository.go` or split by concern
-- **Use cases**: One file per use case or related use cases
-- **Handlers**: One file per handler or version group
+- **Use cases**: One file per use case (e.g., `auth_usecase.go`, `leaderboard_usecase.go`, `score_usecase.go`)
+- **Handlers**: One file per handler or version group (e.g., `handler.go`)
+- **Error mappers**: `error_mapper.go` in adapters layer (module-specific error mapping)
 - **Repository implementations**: One file per repository implementation
+- **DTOs**: One file per DTO or related DTOs (e.g., `user_dto.go`)
+
+**File Structure Example**:
+```
+module/
+├── domain/
+│   ├── user.go           # User entity (no timestamps)
+│   ├── token.go          # TokenPair entity
+│   ├── errors.go         # Domain errors (sentinel errors)
+│   └── constants.go      # Domain constants (Redis keys, topics)
+├── application/
+│   ├── auth_usecase.go   # Use case (returns wrapped errors)
+│   ├── repository.go     # Repository interfaces
+│   └── auth_usecase_test.go  # Tests
+├── adapters/
+│   ├── rest/v1/
+│   │   ├── handler.go    # HTTP handlers (logs errors, maps to APIError)
+│   │   └── error_mapper.go  # Error mapping (domain errors → APIError)
+│   └── mocks/            # Mocks for use case interfaces
+│       └── auth_usecase_mock.go
+└── infrastructure/
+    ├── repository/
+    │   ├── postgres.go   # PostgreSQL implementation
+    │   └── user_dto.go   # DTOs (with timestamps, db tags)
+    ├── jwt/              # Service implementations
+    │   └── jwt.go
+    └── mocks/            # Mocks for repository/service interfaces
+        ├── user_repository_mock.go
+        └── jwt_manager_mock.go
+```
 
 ### Domain Layer Rules
 
-1. **No Infrastructure Concerns**: Domain entities should represent pure business concepts, not database structures. Avoid database IDs, timestamps, or infrastructure-specific fields.
-   ```go
-   // ❌ Bad - contains database ID and timestamps
-   type Score struct {
-       ID        string    `json:"id"`
-       CreatedAt time.Time  `json:"created_at"`
-   }
-   
-   // ✅ Good - pure business concept
-   type LeaderboardEntry struct {
-       UserID   string `json:"user_id"`
-       Username string `json:"username"`
-       Score    int64  `json:"score"`
-       Rank     int64  `json:"rank"`
-   }
-   ```
+**No Infrastructure Concerns**: Domain entities represent pure business concepts.
+```go
+// ❌ Bad - contains timestamps (infrastructure concern)
+type User struct {
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
 
-2. **Repository Interfaces in Application Layer**: Repository interfaces are defined in the application layer (representing application needs), not in the domain layer. They return domain objects, not DTOs.
-   ```go
-   // ✅ Good - repository interface in application layer, returns domain object
-   // application/repository.go
-   type LeaderboardRepository interface {
-       GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error)
-   }
-   
-   // ❌ Bad - returns DTO
-   type LeaderboardRepository interface {
-       GetTopPlayers(ctx context.Context, limit, offset int64) ([]ScoreDTO, error)
-   }
-   ```
+// ✅ Good - pure business concept
+type User struct {
+    ID       string `json:"id"`
+    Username string `json:"username"`
+    Email    string `json:"email"`
+}
+```
 
-3. **Constants in Domain**: Domain constants (like Redis keys, topics) belong in the domain layer as they represent business concepts.
-   ```go
-   // ✅ Good - domain constants
-   const (
-       RedisLeaderboardKey = "leaderboard:global"
-       RedisScoreUpdateTopic = "leaderboard:score:updates"
-   )
-   ```
+Timestamps are handled in infrastructure DTOs only.
+
+**Repository Interfaces in Application Layer**: Interfaces defined in application layer, return domain objects.
+```go
+// ✅ Good - application layer interface, returns domain
+type LeaderboardRepository interface {
+    GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error)
+}
+```
+
+**Constants in Domain**: Business constants (Redis keys, topics) belong in domain layer.
 
 ### Infrastructure Layer Rules
 
-1. **Use DTOs with Database Tags**: Infrastructure layer uses Data Transfer Objects (DTOs) with database tags (`db:`) for database operations. These are internal to the infrastructure layer.
-   ```go
-   // ✅ Good - DTO with db tags
-   type Score struct {
-       ID        string    `db:"id"`
-       UserID    string    `db:"user_id"`
-       Point     int64     `db:"point"`
-       CreatedAt time.Time `db:"created_at"`
-   }
-   ```
+**DTOs**: Use DTOs with `db` tags (unexported), map to domain objects when returning.
+```go
+// ✅ Good - DTO with db tags, unexported
+type score struct {
+    ID        string    `db:"id"`
+    CreatedAt time.Time `db:"created_at"`
+}
 
-2. **Map DTOs to Domain Objects**: Infrastructure implementations map DTOs to domain objects when returning data to the application layer. Domain objects are the contract between layers.
-   ```go
-   // ✅ Good - maps DTO to domain
-   func (r *PostgresRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
-       // Query with DTO
-       var dto ScoreDTO
-       // ... scan into dto
-       
-       // Map to domain
-       return &domain.Leaderboard{
-           Entries: mapToDomain(dto),
-       }, nil
-   }
-   ```
+// Map to domain when returning
+func (r *Repo) GetLeaderboard(...) ([]domain.LeaderboardEntry, error) {
+    // ... query with DTO
+    return mapToDomain(dto), nil
+}
+```
 
-3. **Keep DTOs Private**: DTOs should be unexported (lowercase) as they are internal implementation details of the infrastructure layer.
-   ```go
-   // ✅ Good - DTO is internal to infrastructure
-   type score struct {  // lowercase = unexported
-       ID string `db:"id"`
-   }
-   ```
-
-4. **Implement Service Interfaces**: Infrastructure implements service interfaces (like `BroadcastService`) defined in the application layer, handling all infrastructure-specific details (Redis commands, pub/sub connections, etc.).
+**Service Interfaces**: Implements application layer service interfaces (e.g., `BroadcastService`).
 
 ### Application Layer Rules
 
-1. **Enrich Domain Objects**: Application layer orchestrates data from multiple sources to enrich domain objects. For example, combining leaderboard rankings with user information.
-   ```go
-   // ✅ Good - enriches domain objects with data from multiple sources
-   func (uc *UseCase) GetFullLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
-       entries, _ := uc.leaderboardRepo.GetTopPlayers(ctx, 1000, 0)
-       usernames, _ := uc.userRepo.GetByIDs(ctx, extractUserIDs(entries))
-       enrichEntries(entries, usernames)
-       return &domain.Leaderboard{Entries: entries}, nil
-   }
-   ```
+**Orchestrate Business Logic**: Use cases orchestrate by calling multiple repositories/services.
+```go
+// ✅ Good - orchestrates, enriches domain objects
+func (uc *UseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
+    entries, _ := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
+    usernames, _ := uc.userRepo.GetByIDs(ctx, extractUserIDs(entries))
+    enrichEntries(entries, usernames)
+    return entries, total, nil
+}
+```
 
-2. **Orchestrate, Don't Implement**: Use cases orchestrate business logic by calling multiple repositories/services. They don't implement low-level details - those belong in infrastructure.
-   ```go
-   // ✅ Good - orchestrates business logic and coordinates services
-   func (uc *ScoreUseCase) SubmitScore(ctx context.Context, userID string, req SubmitScoreRequest) error {
-       // Update data in repositories
-       if err := uc.backupRepo.UpsertScore(ctx, userID, req.Score); err != nil {
-           return err
-       }
-       if err := uc.leaderboardRepo.UpdateScore(ctx, userID, req.Score); err != nil {
-           return err
-       }
-       // Publish notification via broadcast service (not repository)
-       return uc.broadcastService.PublishScoreUpdate(ctx)
-   }
-   ```
-
-3. **Define Service Interfaces for External Systems**: Service interfaces (like `BroadcastService` for pub/sub) are defined in the application layer. Use cases depend on these interfaces, not concrete implementations. Infrastructure implements these interfaces.
-   ```go
-   // ✅ Good - service interface in application layer
-   // application/broadcast_service.go
-   type BroadcastService interface {
-       PublishScoreUpdate(ctx context.Context) error  // Publish notifications
-       SubscribeToScoreUpdates(ctx context.Context) (<-chan struct{}, error)
-       BroadcastLeaderboard(ctx context.Context, leaderboard *domain.Leaderboard) error
-       SubscribeToLeaderboardUpdates(ctx context.Context) (<-chan *domain.Leaderboard, error)
-   }
-   
-   // ✅ Good - use case uses interface, not concrete implementation
-   type ScoreUseCase struct {
-       broadcastService BroadcastService  // interface, not *RedisBroadcastService
-       leaderboardRepo LeaderboardRepository
-       // ... other dependencies
-   }
-   
-   // ✅ Good - repository only updates data, use case publishes notifications
-   func (uc *ScoreUseCase) SubmitScore(...) error {
-       uc.leaderboardRepo.UpdateScore(...)  // Only updates data
-       uc.broadcastService.PublishScoreUpdate(...)  // Publishes notification
-   }
-   
-   // Infrastructure implements the interface
-   // infrastructure/broadcast/redis_broadcast_service.go
-   type RedisBroadcastService struct { ... }
-   func (s *RedisBroadcastService) PublishScoreUpdate(...) error { ... }
-   ```
+**Service Interfaces**: Define service interfaces (e.g., `BroadcastService`) in application layer, implemented in infrastructure.
 
 ### Adapters Layer Rules
 
-1. **Delegate to Application Layer**: Adapters delegate all business logic to the application layer (use cases). They handle protocol-specific concerns only.
-   ```go
-   // ✅ Good - delegates to use case
-   func (h *Handler) SubmitScore(c *gin.Context) {
-       if err := h.useCase.SubmitScore(ctx, userID, req); err != nil {
-           response.Error(c, err)
-           return
-       }
-       response.Success(c, data, "Success")
-   }
-   ```
+**Delegate to Application**: Handlers delegate business logic to use cases, handle protocol concerns only.
+```go
+// ✅ Good - delegates, maps errors, handles protocol
+func (h *Handler) SubmitScore(c *gin.Context) {
+    if err := h.useCase.SubmitScore(ctx, userID, req); err != nil {
+        apiErr := toAPIError(err)  // Module-specific mapper
+        h.logger.Err(ctx, err).Msg("Request error")
+        response.Error(c, apiErr)
+        return
+    }
+    response.Success(c, data, "Success")
+}
+```
 
-2. **Handle Protocol Concerns Only**: Adapters manage connection lifecycles (SSE, WebSocket), request/response transformation, and protocol-specific headers. Business logic stays in the application layer.
-   ```go
-   // ✅ Good - handles SSE connection lifecycle
-   func (h *Handler) GetLeaderboard(c *gin.Context) {
-       c.Header("Content-Type", "text/event-stream")
-       updateCh := h.useCase.SubscribeToLeaderboardUpdates(ctx)
-       // ... manage connection
-   }
-   ```
+**Error Mapping**: Each module has `error_mapper.go` in adapters layer (domain/validation errors → APIError).
 
 ### Error Handling
 
-- Use domain-specific errors in application layer
-- Use shared error helpers from `internal/shared/response`
-- Log errors with context in application layer
-- Return errors, don't panic (except in unrecoverable situations)
+**Strategy**:
+- **Application**: Returns wrapped errors (`fmt.Errorf("...: %w", err)`) - no `APIError`
+- **Adapters**: Logs errors, maps to `APIError` via module-specific error mappers
+- **Domain**: Sentinel errors (e.g., `ErrUserNotFound`) in `domain/errors.go`
+- **Validator**: Returns `ValidationError` - mapped to `APIError` in adapters
+
+**Error Types**:
+- `APIError` (`internal/shared/response/error.go`) - API error response
+- `ValidationError` (`internal/shared/validator/validator.go`) - Validation error
+- Domain errors (`domain/errors.go`) - Business logic errors
 
 ### Dependency Injection
 
-- All dependencies injected via constructors
-- Repository interfaces defined in application layer, implementations in infrastructure
-- Wire dependencies in `cmd/server/main.go`
-- Enables easy testing with mocks
+**Constructor Pattern**: Accept interfaces, return structs (use cases) or interfaces (repositories).
+```go
+// ✅ Use case: accepts interfaces, returns concrete struct
+func NewLeaderboardUseCase(
+    cacheRepo LeaderboardCacheRepository,  // interface
+    logger *logger.Logger,
+) *leaderboardUseCase {                    // concrete struct
+    return &leaderboardUseCase{...}
+}
+
+// ✅ Repository: returns interface
+func NewPostgresRepository(pool *pgxpool.Pool) application.UserRepository {
+    return &PostgresUserRepository{pool: pool}
+}
+```
+
+Dependencies wired in `cmd/server/main.go`. Enables easy testing with mocks.
+
+### Mock Organization
+
+**Core Principle**: Mocks belong to the layer that **depends on** the interface, not where it's defined.
+
+**Rules**:
+- **Infrastructure layer mocks**: Interfaces used by infrastructure implementations (repositories, services) → `infrastructure/mocks/`
+- **Adapters layer mocks**: Interfaces used by adapters/handlers (use cases) → `adapters/mocks/`
+- Mocks live **outward** from where interfaces are defined
+- Prevents import cycles (mocks don't need to import application layer)
+
+See [File Structure Example](#file-organization) above for complete structure.
 
 ## Module Independence
 

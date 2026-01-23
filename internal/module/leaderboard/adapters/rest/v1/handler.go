@@ -4,12 +4,13 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"real-time-leaderboard/internal/module/leaderboard/application"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
+	"real-time-leaderboard/internal/shared/request"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
 
@@ -19,46 +20,69 @@ import (
 const (
 	// Keep-alive interval for SSE connections
 	keepAliveInterval = 15 * time.Second
-	// Initial leaderboard limit for SSE
-	defaultLeaderboardLimit = 100
 )
 
 // LeaderboardHandler handles HTTP requests for leaderboards and scores
 type LeaderboardHandler struct {
-	leaderboardUseCase *application.LeaderboardUseCase
-	scoreUseCase       *application.ScoreUseCase
+	leaderboardUseCase application.LeaderboardUseCase
+	scoreUseCase       application.ScoreUseCase
+	logger             *logger.Logger
 }
 
 // NewLeaderboardHandler creates a new leaderboard HTTP handler
 func NewLeaderboardHandler(
-	leaderboardUseCase *application.LeaderboardUseCase,
-	scoreUseCase *application.ScoreUseCase,
+	leaderboardUseCase application.LeaderboardUseCase,
+	scoreUseCase application.ScoreUseCase,
+	l *logger.Logger,
 ) *LeaderboardHandler {
 	return &LeaderboardHandler{
 		leaderboardUseCase: leaderboardUseCase,
 		scoreUseCase:       scoreUseCase,
+		logger:             l,
 	}
 }
 
-// GetLeaderboard handles getting the leaderboard via SSE
-// Handler only manages SSE connection lifecycle, business logic is in use case
+// GetLeaderboard handles GET /leaderboard with pagination
 func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
+	var pagination request.Pagination
+	if err := c.ShouldBindQuery(&pagination); err != nil {
+		valErr := validator.Validate(pagination)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
+		return
+	}
+
+	if err := validator.Validate(pagination); err != nil {
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
+		return
+	}
+
+	ctx := c.Request.Context()
+	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
+
+	normalized := pagination.Normalize()
+	entries, total, err := h.leaderboardUseCase.GetLeaderboard(ctx, normalized.GetLimit(), normalized.GetOffset())
+	if err != nil {
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
+		return
+	}
+
+	meta := response.NewPagination(normalized.GetOffset(), normalized.GetLimit(), total)
+	response.SuccessWithMeta(c, entries, "Leaderboard retrieved successfully", meta)
+}
+
+// GetLeaderboardUpdate handles GET /leaderboard/stream via SSE for real-time delta updates
+func (h *LeaderboardHandler) GetLeaderboardUpdate(c *gin.Context) {
 	// Set headers for SSE
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
-
-	// Parse limit from query params (offset is not supported for SSE, always 0)
-	limit := defaultLeaderboardLimit
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
-			if limit > defaultLeaderboardLimit {
-				limit = defaultLeaderboardLimit
-			}
-		}
-	}
 
 	// Create context for the request
 	ctx := c.Request.Context()
@@ -66,27 +90,14 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Sync from PostgreSQL to Redis if needed (lazy loading)
 	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
-	// Subscribe to leaderboard updates (gets channel for full leaderboard)
-	updateCh, err := h.leaderboardUseCase.SubscribeToLeaderboardUpdates(ctx)
+	// Subscribe to entry delta updates
+	updateCh, err := h.leaderboardUseCase.SubscribeToEntryUpdates(ctx)
 	if err != nil {
 		// If subscription fails, create a closed channel
-		closedCh := make(chan *domain.Leaderboard)
+		closedCh := make(chan *domain.LeaderboardEntry)
 		close(closedCh)
 		updateCh = closedCh
 	}
-
-	// Fetch initial leaderboard
-	fullLeaderboard, err := h.leaderboardUseCase.GetFullLeaderboard(ctx)
-	if err != nil {
-		// If we can't get initial leaderboard, still try to stream updates
-		fullLeaderboard = &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
-	}
-
-	// Extract limit from full leaderboard
-	filteredLeaderboard := extractLimit(fullLeaderboard, limit)
-
-	// Send initial leaderboard via SSE using standard response format
-	sendSSEResponse(c, filteredLeaderboard, "Leaderboard retrieved successfully")
 
 	// Set up keep-alive ticker
 	ticker := time.NewTicker(keepAliveInterval)
@@ -95,24 +106,28 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// Handle client disconnection
 	notify := c.Writer.CloseNotify()
 
-	// Keep connection, push updates from broadcaster
+	// Keep connection, push delta updates from broadcaster
 	for {
 		select {
 		case <-notify:
 			// Client disconnected
 			return
 
-		case fullLeaderboard, ok := <-updateCh:
+		case entry, ok := <-updateCh:
 			if !ok {
 				// Channel closed, connection ended
 				return
 			}
 
-			// Extract limit from full leaderboard
-			filtered := extractLimit(fullLeaderboard, limit)
-
-			// Send leaderboard update to client using standard response format
-			sendSSEResponse(c, filtered, "Leaderboard updated")
+			// Send entry delta update to client using standard response format
+			resp := response.Response{
+				Success: true,
+				Data:    entry,
+				Message: "Leaderboard entry updated",
+			}
+			messageBytes, _ := json.Marshal(resp)
+			_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
+			c.Writer.Flush()
 
 		case <-ticker.C:
 			// Send keep-alive comment
@@ -122,55 +137,36 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	}
 }
 
-// sendSSEResponse sends a standard API response via SSE
-func sendSSEResponse(c *gin.Context, data interface{}, message string) {
-	resp := response.Response{
-		Success: true,
-		Data:    data,
-		Message: message,
-	}
-	messageBytes, _ := json.Marshal(resp)
-	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", messageBytes)
-	c.Writer.Flush()
-}
-
-// extractLimit extracts the requested limit from full leaderboard
-func extractLimit(leaderboard *domain.Leaderboard, limit int) *domain.Leaderboard {
-	if leaderboard == nil {
-		return &domain.Leaderboard{Entries: []domain.LeaderboardEntry{}, Total: 0}
-	}
-
-	if limit >= len(leaderboard.Entries) {
-		return leaderboard
-	}
-
-	return &domain.Leaderboard{
-		Entries: leaderboard.Entries[:limit],
-		Total:   int64(limit),
-	}
-}
-
 // SubmitScore handles score update
 func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
+		apiErr := response.NewUnauthorizedError("User ID not found in context")
+		h.logger.Error(c.Request.Context(), apiErr.Error())
+		response.Error(c, apiErr)
 		return
 	}
 
 	var req application.SubmitScoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, validator.Validate(req))
+		valErr := validator.Validate(req)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := h.scoreUseCase.SubmitScore(c.Request.Context(), userID, req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
@@ -181,7 +177,8 @@ func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 func (h *LeaderboardHandler) RegisterPublicRoutes(router *gin.RouterGroup) {
 	leaderboard := router.Group("/leaderboard")
 	{
-		leaderboard.GET("/stream", h.GetLeaderboard)
+		leaderboard.GET("", h.GetLeaderboard)
+		leaderboard.GET("/stream", h.GetLeaderboardUpdate)
 	}
 }
 

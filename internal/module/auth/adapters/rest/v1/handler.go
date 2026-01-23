@@ -3,6 +3,7 @@ package v1
 
 import (
 	"real-time-leaderboard/internal/module/auth/application"
+	"real-time-leaderboard/internal/shared/logger"
 	"real-time-leaderboard/internal/shared/middleware"
 	"real-time-leaderboard/internal/shared/response"
 	"real-time-leaderboard/internal/shared/validator"
@@ -12,13 +13,15 @@ import (
 
 // Handler handles HTTP requests for authentication
 type Handler struct {
-	authUseCase *application.AuthUseCase
+	authUseCase application.AuthUseCase
+	logger      *logger.Logger
 }
 
 // NewHandler creates a new auth HTTP handler
-func NewHandler(authUseCase *application.AuthUseCase) *Handler {
+func NewHandler(authUseCase application.AuthUseCase, l *logger.Logger) *Handler {
 	return &Handler{
 		authUseCase: authUseCase,
+		logger:      l,
 	}
 }
 
@@ -26,18 +29,25 @@ func NewHandler(authUseCase *application.AuthUseCase) *Handler {
 func (h *Handler) Register(c *gin.Context) {
 	var req application.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, validator.Validate(req))
+		valErr := validator.Validate(req)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	user, tokenPair, err := h.authUseCase.Register(c.Request.Context(), req)
 	if err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
@@ -51,18 +61,25 @@ func (h *Handler) Register(c *gin.Context) {
 func (h *Handler) Login(c *gin.Context) {
 	var req application.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, validator.Validate(req))
+		valErr := validator.Validate(req)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	user, tokenPair, err := h.authUseCase.Login(c.Request.Context(), req)
 	if err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
@@ -79,18 +96,25 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, validator.Validate(req))
+		valErr := validator.Validate(req)
+		apiErr := toAPIError(valErr)
+		h.logger.Err(c.Request.Context(), valErr).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	if err := validator.Validate(req); err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
 	tokenPair, err := h.authUseCase.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 
@@ -101,13 +125,17 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 func (h *Handler) GetCurrentUser(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		response.Error(c, response.NewUnauthorizedError("User ID not found in context"))
+		apiErr := response.NewUnauthorizedError("User ID not found in context")
+		h.logger.Error(c.Request.Context(), apiErr.Error())
+		response.Error(c, apiErr)
 		return
 	}
 
 	user, err := h.authUseCase.GetCurrentUser(c.Request.Context(), userID)
 	if err != nil {
-		response.Error(c, err)
+		apiErr := toAPIError(err)
+		h.logger.Err(c.Request.Context(), err).Msg("Request error")
+		response.Error(c, apiErr)
 		return
 	}
 

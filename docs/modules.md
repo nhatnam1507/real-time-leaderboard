@@ -9,12 +9,12 @@ For general application features and high-level flows, see [Application Features
 **Purpose**: User authentication and authorization
 
 **Components**:
-- **Domain**: User entity
-- **Application**: UserRepository interface, RegisterUseCase, LoginUseCase, ValidateTokenUseCase, RefreshTokenUseCase, GetCurrentUserUseCase
-- **Adapters**: HTTP handlers for registration, login, token refresh, and current user info
-  - `RegisterPublicRoutes()` - Registers public routes (register, login, refresh)
-  - `RegisterProtectedRoutes()` - Registers protected routes (get current user)
-- **Infrastructure**: PostgreSQL UserRepository, JWT token manager
+- **Domain**: `User` (`domain/user.go`), `TokenPair` (`domain/token.go`), domain errors (`domain/errors.go`)
+- **Application**: `AuthUseCase` (`application/auth_usecase.go`), `UserRepository` interface (`application/repository.go`)
+- **Adapters**: HTTP handlers (`adapters/rest/v1/handler.go`), error mapper (`adapters/rest/v1/error_mapper.go`)
+- **Infrastructure**: PostgreSQL repository (`infrastructure/repository/postgres.go`), JWT manager (`infrastructure/jwt/jwt.go`)
+
+For architectural details, see [Architecture](./architecture.md).
 
 **Endpoints**:
 - `POST /api/v1/auth/register` - User registration (public)
@@ -109,34 +109,21 @@ The system implements JWT-based authentication with automatic token management:
 **Purpose**: Score update and real-time leaderboard queries via Server-Sent Events (SSE)
 
 **Components**:
-- **Domain**: 
-  - `LeaderboardEntry` (user_id, username, score, rank)
-  - `Leaderboard` (entries, total)
-  - Domain constants (Redis keys, topics)
+- **Domain**: `LeaderboardEntry` (`domain/leaderboard.go`), constants (`domain/constants.go`)
 - **Application**: 
-  - `LeaderboardBackupRepository` interface
-  - `LeaderboardRepository` interface
-  - `UserRepository` interface (module-owned, not from auth module)
-  - `BroadcastService` interface - For real-time leaderboard broadcasting (publishes notifications)
-  - `ScoreUseCase` - Updates score in PostgreSQL and Redis, publishes notifications via broadcast service
-  - `LeaderboardUseCase` - Handles leaderboard queries, enrichment, and broadcasting:
-    - `SyncFromPostgres()` - Lazy loading from PostgreSQL to Redis
-    - `GetFullLeaderboard()` - Fetches leaderboard and enriches with usernames
-    - `StartBroadcasting()` - Listens to score updates and broadcasts leaderboard
-    - `SubscribeToLeaderboardUpdates()` - Provides subscription channel for SSE handlers
-- **Adapters**: 
-  - `LeaderboardHandler` - HTTP handler for score update and leaderboard retrieval (SSE)
-    - `RegisterPublicRoutes()` - Registers public routes (SSE stream)
-    - `RegisterProtectedRoutes()` - Registers protected routes (score submission)
-- **Infrastructure**: 
-  - PostgreSQL `LeaderboardBackupRepository` - Stores scores, `GetLeaderboard()` with username JOIN
-  - Redis `LeaderboardRepository` - Sorted sets for real-time queries
-  - PostgreSQL `UserRepository` - Batch username fetching for leaderboard module
-  - Redis `BroadcastService` (`RedisBroadcastService`) - Implements pub/sub for real-time leaderboard broadcasting
+  - `LeaderboardUseCase` - `SyncFromPostgres()`, `GetLeaderboard(limit, offset int64)`, `GetFullLeaderboard()` (internal), `SubscribeToEntryUpdates()`
+  - `ScoreUseCase` - `SubmitScore()` (updates persistence/cache, broadcasts if rank <= 1000)
+  - Repository interfaces: `LeaderboardPersistenceRepository`, `LeaderboardCacheRepository`, `UserRepository` (module-owned)
+  - `BroadcastService` interface
+- **Adapters**: HTTP handlers (`adapters/rest/v1/handler.go`), error mapper (`adapters/rest/v1/error_mapper.go`)
+- **Infrastructure**: PostgreSQL/Redis repositories, Redis broadcast service
+
+For architectural details, see [Architecture](./architecture.md).
 
 **Endpoints**:
+- `GET /api/v1/leaderboard?limit=10&offset=0` - Get paginated leaderboard (for initial dashboard load and Top N changes)
+- `GET /api/v1/leaderboard/stream` - SSE stream for real-time entry delta updates (stays open, independent of pagination)
 - `PUT /api/v1/leaderboard/score` - Update score (authenticated)
-- `GET /api/v1/leaderboard/stream?limit=50` - SSE stream for leaderboard (real-time updates)
 
 **Module Independence**: Owns its `UserRepository` interface (no dependency on auth module). For details on module independence, see [Architecture - Module Independence](./architecture.md#module-independence).
 
@@ -145,244 +132,117 @@ The system implements JWT-based authentication with automatic token management:
 ```mermaid
 sequenceDiagram
     participant User
-    participant ScoreUseCase
+    participant API
     participant Storage
     participant Cache
-    participant BroadcastService
-    participant BroadcastUseCase
+    participant Broadcast
     participant Viewers
     
-    User->>ScoreUseCase: Update score (authenticated)
-    ScoreUseCase->>ScoreUseCase: Validate authentication
-    ScoreUseCase->>Storage: Save score (PostgreSQL)
-    Storage-->>ScoreUseCase: Score saved
-    ScoreUseCase->>Cache: Update ranking (Redis)
-    Cache-->>ScoreUseCase: Ranking updated
-    ScoreUseCase->>BroadcastService: Publish score update notification
-    BroadcastService->>BroadcastUseCase: Notify score change
-    BroadcastUseCase->>Cache: Fetch updated leaderboard
-    Cache-->>BroadcastUseCase: Leaderboard data
-    BroadcastUseCase->>Storage: Fetch usernames
-    Storage-->>BroadcastUseCase: Username data
-    BroadcastUseCase->>BroadcastUseCase: Enrich entries
-    BroadcastUseCase->>BroadcastService: Broadcast leaderboard
-    BroadcastService->>Viewers: Push update to all viewers
-    ScoreUseCase-->>User: Score updated successfully
+    User->>API: Update score (authenticated)
+    API->>Storage: Save score
+    Storage-->>API: Score saved
+    API->>Cache: Update ranking
+    Cache-->>API: Ranking updated
+    API->>Cache: Get user rank
+    Cache-->>API: Rank
+    
+    alt Rank <= MaxBroadcastRank (1000)
+        API->>Storage: Get username
+        Storage-->>API: Username
+        API->>Broadcast: Broadcast entry delta
+        Broadcast->>Viewers: Push entry update
+    else Rank > MaxBroadcastRank
+        Note over API: Skip broadcast (optimization)
+    end
+    
+    API-->>User: Score updated successfully
 ```
 
 **What Happens**:
 1. Authenticated user submits new score
-2. System validates authentication
-3. Score is saved to persistent storage (PostgreSQL)
-4. Leaderboard ranking is updated in cache (Redis) - repository only updates data
-5. Score use case publishes score update notification via broadcast service
-6. Broadcast service notifies the broadcast use case
-7. Broadcast use case fetches updated leaderboard and enriches with usernames
-8. Broadcast use case broadcasts enriched leaderboard via broadcast service
-9. All leaderboard viewers receive update via SSE
-10. User receives confirmation
+2. Score saved to PostgreSQL, ranking updated in Redis
+3. If rank <= 1000: fetch username, create entry delta, broadcast via pub/sub
+4. All connected viewers receive entry update via SSE and merge into local state
+5. User receives confirmation
 
-### Real-Time Leaderboard Flow
+**Optimization**: Only entries ranked within top 1000 are broadcasted to reduce network traffic.
+
+### Leaderboard Viewing Flow
 
 ```mermaid
 sequenceDiagram
     participant Viewer
-    participant System
+    participant API
     participant Cache
     participant Storage
     participant Broadcast
     
-    Viewer->>System: Request leaderboard (SSE connection)
-    System->>System: Check if cache needs sync
+    Note over Viewer: Initial Dashboard Load
+    Viewer->>API: GET /leaderboard?limit=10&offset=0
+    API->>Cache: Check total count
+    Cache-->>API: Total count
+    alt Cache empty (total = 0)
+        Note over API,Storage: Lazy Loading: Sync from PostgreSQL
+        API->>Storage: Load all scores with usernames
+        Storage-->>API: Score entries
+        API->>Cache: Populate cache (silent, no broadcasts)
+    end
+    API->>Cache: Get top N entries
+    Cache-->>API: Entries (userID, score, rank)
+    API->>Cache: Get total count
+    Cache-->>API: Total
+    API->>Storage: Batch fetch usernames
+    Storage-->>API: Username data
+    API->>API: Enrich entries with usernames
+    API-->>Viewer: Response with pagination meta
+    
+    Note over Viewer: Real-Time Delta Updates
+    Viewer->>API: GET /leaderboard/stream (SSE)
+    API->>Cache: Check total count
     alt Cache empty
-        System->>Storage: Load all scores
-        Storage-->>System: Score data
-        System->>Cache: Populate cache
+        API->>Storage: Load all scores
+        Storage-->>API: Score entries
+        API->>Cache: Populate cache (silent)
     end
-    System->>Cache: Retrieve current rankings
-    Cache-->>System: Leaderboard data
-    System->>Storage: Fetch usernames
-    Storage-->>System: Username data
-    System->>System: Combine rankings and usernames
-    System-->>Viewer: Send initial leaderboard
+    API->>Broadcast: Subscribe to entry deltas
+    Broadcast-->>Viewer: Entry delta updates (SSE)
     
-    Viewer->>Broadcast: Subscribe to updates
-    Broadcast->>Broadcast: Listen for score changes
-    
-    Note over Cache,Viewer: When score is updated...
-    Cache->>Broadcast: Score change notification
-    Broadcast->>Cache: Fetch updated rankings
-    Cache-->>Broadcast: Updated leaderboard
-    Broadcast->>Storage: Fetch usernames
-    Storage-->>Broadcast: Username data
-    Broadcast->>Broadcast: Combine and broadcast
-    Broadcast-->>Viewer: Push update to all viewers
+    Note over Cache,Viewer: When score is updated (rank <= 1000)...
+    Cache->>Broadcast: Entry delta published
+    Broadcast->>Viewer: Single entry update
+    Viewer->>Viewer: Merge into local state
+    Viewer->>Viewer: Re-render top N
 ```
 
 **What Happens**:
 
-1. **Initial Connection**:
-   1. Viewer connects to leaderboard endpoint
-   2. System checks if cache needs data from persistent storage
-   3. If cache is empty, scores are loaded from storage
-   4. Current rankings are retrieved from cache
-   5. Usernames are fetched and combined with rankings
-   6. Initial leaderboard is sent to viewer
+1. **Initial Dashboard Load**:
+   - Client calls `GET /leaderboard?limit=10&offset=0`
+   - If cache empty: lazy load from PostgreSQL to Redis (silent, no broadcasts)
+   - Retrieve top N from cache, batch fetch usernames, enrich entries
+   - Return entries with pagination metadata
 
-2. **Real-Time Updates**:
-   1. Viewer subscribes to live updates
-   2. When any score changes:
-      - Broadcast service receives notification
-      - Updated rankings are fetched
-      - Usernames are refreshed
-      - Updated leaderboard is pushed to all connected viewers
-   3. Viewers receive updates automatically without polling
+2. **Real-Time Delta Updates**:
+   - Client connects to `GET /leaderboard/stream` (SSE) - **stays open**
+   - Subscribe to entry delta updates via broadcast service
+   - When score updated (rank <= 1000): single entry delta broadcasted, all viewers receive via SSE
+   - Clients merge updates into local state and re-render
+
+3. **Changing Top N**:
+   - Client calls `GET /leaderboard?limit=50&offset=0` with new pagination
+   - **Stream stays open** - only `/leaderboard` API called
+   - Stream continues providing delta updates independently
 
 **Key Characteristics**:
-- **Automatic Recovery**: If cache is empty, data is automatically loaded from storage
-- **Real-Time**: Updates are pushed immediately when scores change
-- **Efficient**: Single broadcast service updates all viewers simultaneously
-- **Scalable**: Works across multiple server instances
-
-### Lazy Loading Flow
-
-The system implements **lazy loading** to automatically sync PostgreSQL data to Redis:
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant System
-    participant Cache
-    participant Storage
-    
-    Client->>System: Request leaderboard
-    System->>Cache: Check if empty
-    alt Cache is empty
-        Cache-->>System: Empty
-        System->>Storage: Load all scores
-        Storage-->>System: Score data with usernames
-        System->>Cache: Populate cache
-        Cache-->>System: Cache populated
-    else Cache has data
-        Cache-->>System: Has data
-    end
-    System->>Cache: Retrieve rankings
-    Cache-->>System: Leaderboard data
-    System->>System: Enrich with usernames (if needed)
-    System-->>Client: Return leaderboard
-```
-
-**What Happens**:
-1. Client requests leaderboard
-2. System checks if Redis cache is empty
-3. If empty, system loads all scores from PostgreSQL
-4. Scores are populated into Redis cache using `UpdateScore` (silent updates, no notifications)
-5. Current rankings are retrieved from cache
-6. Leaderboard is enriched with usernames (if not already included)
-7. Leaderboard is returned to client
-
-**Note**: During lazy loading, `UpdateScore` is called multiple times but does not publish notifications. This ensures no duplicate broadcasts are triggered during sync operations. Only real user score updates (via `ScoreUseCase`) trigger broadcasts.
-
-**Key Features**:
-- **Automatic Sync**: On first leaderboard request, if Redis is empty, the system automatically syncs all scores from PostgreSQL to Redis
-- **Non-blocking**: Sync happens on-demand, not on startup, ensuring fast application startup
-- **Resilient**: Handles Redis restarts gracefully - data is automatically restored on next request
-- **Efficient**: Only syncs when needed (Redis is empty), avoiding unnecessary work
-
-**Manual Recovery**:
-If Redis data is lost, the system can rebuild the leaderboard from PostgreSQL:
-- PostgreSQL stores one record per user with their current score (UPSERT pattern)
-- `GetLeaderboard()` retrieves all scores with usernames via JOIN
-- All users' scores can be restored to Redis via `ZADD` operations
-
-### Broadcast Service Flow
-
-```mermaid
-sequenceDiagram
-    participant ScoreUseCase
-    participant Repository
-    participant BroadcastService
-    participant BroadcastUseCase
-    participant Cache
-    participant Storage
-    participant SSEHandlers
-    
-    ScoreUseCase->>Repository: Update score (PostgreSQL + Redis)
-    Repository-->>ScoreUseCase: Score updated
-    ScoreUseCase->>BroadcastService: Publish score update notification
-    BroadcastService->>BroadcastService: Publish to Redis pub/sub
-    BroadcastService->>BroadcastUseCase: Notify via subscription
-    BroadcastUseCase->>BroadcastUseCase: Acquire distributed lock
-    BroadcastUseCase->>Cache: Fetch updated rankings
-    Cache-->>BroadcastUseCase: Leaderboard entries
-    BroadcastUseCase->>Storage: Fetch usernames
-    Storage-->>BroadcastUseCase: Username data
-    BroadcastUseCase->>BroadcastUseCase: Enrich entries
-    BroadcastUseCase->>BroadcastService: Broadcast leaderboard
-    BroadcastService->>BroadcastService: Publish to viewer topic
-    BroadcastService->>SSEHandlers: Deliver update via pub/sub
-    SSEHandlers-->>SSEHandlers: Send to clients
-```
-
-**What Happens**:
-1. `ScoreUseCase` updates score in PostgreSQL and Redis (repository only updates data, no publishing)
-2. `ScoreUseCase` publishes score update notification via `BroadcastService.PublishScoreUpdate()`
-3. Broadcast service publishes to Redis `leaderboard:score:updates` topic
-4. `LeaderboardUseCase.StartBroadcasting()` receives notification (via `BroadcastService` interface)
-5. Use case acquires distributed lock to prevent duplicate processing
-6. Use case fetches full leaderboard from cache
-7. Use case fetches usernames from storage
-8. Use case enriches leaderboard entries with usernames
-9. Use case broadcasts enriched leaderboard via `BroadcastService.BroadcastLeaderboard()`
-10. Broadcast service publishes to Redis `leaderboard:viewer:updates` topic
-11. SSE handlers subscribe via `LeaderboardUseCase.SubscribeToLeaderboardUpdates()`
-12. SSE clients receive updates through handler
-
-**Key Characteristics**:
-- **Clean Separation**: Repositories only update data, broadcast service handles all pub/sub
-- **Single Processing**: Distributed lock ensures only one instance processes each update
-- **Efficient**: Fetches leaderboard once, broadcasts to all clients
-- **Scalable**: Works across multiple server instances
-- **No Duplicates**: Lazy loading doesn't trigger broadcasts (UpdateScore doesn't publish)
-
-### Username Enrichment Flow
-
-Leaderboard entries include usernames from multiple sources:
-
-```mermaid
-sequenceDiagram
-    participant System
-    participant Cache
-    participant Storage
-    participant Application
-    
-    System->>Cache: Fetch leaderboard entries
-    Cache-->>System: Entries (user IDs, scores, ranks)
-    System->>Application: Extract user IDs
-    Application->>Storage: Batch fetch usernames
-    Storage-->>Application: Username map
-    Application->>Application: Enrich entries
-    Application-->>System: Enriched leaderboard
-```
-
-**What Happens**:
-1. System fetches leaderboard entries from cache (Redis) or storage (PostgreSQL)
-2. For PostgreSQL: Usernames are included via JOIN query
-3. For Redis: Application layer extracts user IDs from entries
-4. Application layer batch fetches usernames using `UserRepository.GetByIDs()`
-5. Application layer enriches entries with usernames
-6. Enriched leaderboard is returned to clients
-
-**Key Characteristics**:
-- **PostgreSQL**: `GetLeaderboard()` joins with `users` table to include usernames directly (single query)
-- **Redis**: Entries are enriched via batch fetch in application layer (efficient, no JOIN needed)
-- **Clean Separation**: Username enrichment happens in application layer, not infrastructure
+- Lazy loading: Auto-syncs from PostgreSQL when cache empty
+- Real-time: Immediate updates via SSE (rank <= 1000)
+- Efficient: Single broadcast updates all viewers via Redis pub/sub
+- Scalable: Works across multiple server instances
+- Independent: `/leaderboard` (pagination) and `/leaderboard/stream` (delta updates) operate separately
 
 ### Infrastructure Implementation Details
 
 #### Redis Storage Strategy
-
-The leaderboard system uses Redis for real-time queries and notifications:
 
 **Sorted Sets for Leaderboard Storage**:
 - Key: `leaderboard:global` (single global leaderboard)
@@ -393,7 +253,5 @@ The leaderboard system uses Redis for real-time queries and notifications:
 - All operations are atomic, no application-level locking needed
 
 **Pub/Sub for Real-Time Notifications**:
-- Score Update Topic: `leaderboard:score:updates` - Published when scores are updated
-- Viewer Update Topic: `leaderboard:viewer:updates` - Published with full leaderboard JSON
-- Distributed Lock: `leaderboard:broadcast:lock` - Prevents duplicate processing in multi-instance deployments
-- Infrastructure layer handles all Redis pub/sub connection management
+- Topic: `leaderboard:viewer:updates` - Single entry delta updates (LeaderboardEntry JSON)
+- MaxBroadcastRank: 1000 - Only top 1000 entries trigger broadcasts

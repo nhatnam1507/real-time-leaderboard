@@ -12,14 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresLeaderboardRepository implements LeaderboardBackupRepository using PostgreSQL
-// Stores only the highest score per user as a backup/recovery mechanism for Redis
+// PostgresLeaderboardRepository implements LeaderboardPersistenceRepository using PostgreSQL
+// Stores the highest score per user as persistent storage
 type PostgresLeaderboardRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresLeaderboardRepository creates a new PostgreSQL leaderboard backup repository
-func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) application.LeaderboardBackupRepository {
+// NewPostgresLeaderboardRepository creates a new PostgreSQL leaderboard persistence repository
+func NewPostgresLeaderboardRepository(pool *pgxpool.Pool) application.LeaderboardPersistenceRepository {
 	return &PostgresLeaderboardRepository{pool: pool}
 }
 
@@ -48,7 +48,7 @@ func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID 
 
 // GetLeaderboard retrieves the full leaderboard from PostgreSQL with usernames
 // Used for syncing data to Redis when Redis is empty
-func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) (*domain.Leaderboard, error) {
+func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, error) {
 	query := `
 		SELECT 
 			l.user_id,
@@ -79,8 +79,5 @@ func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) (*do
 		return nil, fmt.Errorf("error iterating leaderboard entries: %w", err)
 	}
 
-	return &domain.Leaderboard{
-		Entries: entries,
-		Total:   int64(len(entries)),
-	}, nil
+	return entries, nil
 }

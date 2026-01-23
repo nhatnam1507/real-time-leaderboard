@@ -1,25 +1,25 @@
 // Package request provides common request structures for API endpoints.
 package request
 
-// PaginationRequest represents pagination parameters for list endpoints
-type PaginationRequest struct {
-	Offset int `json:"offset" form:"offset" validate:"min=0"`
-	Limit  int `json:"limit" form:"limit" validate:"min=1,max=100"`
+// Pagination represents pagination parameters for list endpoints
+type Pagination struct {
+	Offset int64 `json:"offset" form:"offset" validate:"min=0"`
+	Limit  int64 `json:"limit" form:"limit" validate:"min=1,max=100"`
 }
 
 const (
 	// DefaultLimit is the default number of items per page
-	DefaultLimit = 10
+	DefaultLimit int64 = 10
 	// DefaultOffset is the default offset value
-	DefaultOffset = 0
+	DefaultOffset int64 = 0
 	// MaxLimit is the maximum number of items per page
-	MaxLimit = 100
+	MaxLimit int64 = 100
 	// MinLimit is the minimum number of items per page
-	MinLimit = 1
+	MinLimit int64 = 1
 )
 
 // Normalize applies default values and enforces bounds for pagination parameters
-func (p *PaginationRequest) Normalize() *PaginationRequest {
+func (p *Pagination) Normalize() *Pagination {
 	if p.Limit <= 0 {
 		p.Limit = DefaultLimit
 	}
@@ -36,14 +36,13 @@ func (p *PaginationRequest) Normalize() *PaginationRequest {
 }
 
 // GetOffset returns the normalized offset value
-func (p *PaginationRequest) GetOffset() int {
+func (p *Pagination) GetOffset() int64 {
 	normalized := p.Normalize()
 	return normalized.Offset
 }
 
 // GetLimit returns the normalized limit value
-func (p *PaginationRequest) GetLimit() int {
+func (p *Pagination) GetLimit() int64 {
 	normalized := p.Normalize()
 	return normalized.Limit
 }
-

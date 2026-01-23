@@ -64,8 +64,8 @@ func main() {
 	userRepo := authInfra.NewPostgresUserRepository(db.Pool)
 	jwtMgr := authJWT.NewManager(cfg.JWT.SecretKey, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 
-	backupRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
-	leaderboardRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
+	persistenceRepo := leaderboardInfra.NewPostgresLeaderboardRepository(db.Pool)
+	cacheRepo := leaderboardInfra.NewRedisLeaderboardRepository(redisClient.GetClient())
 	leaderboardUserRepo := leaderboardInfra.NewUserRepository(db.Pool)
 
 	// Initialize broadcast service (infrastructure layer)
@@ -73,20 +73,12 @@ func main() {
 
 	// Initialize use cases
 	authUseCase := authApp.NewAuthUseCase(userRepo, jwtMgr, l)
-	scoreUseCase := leaderboardApp.NewScoreUseCase(backupRepo, leaderboardRepo, broadcastService, l)
-	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(leaderboardRepo, backupRepo, leaderboardUserRepo, broadcastService, l)
-
-	// Start broadcasting in background
-	ctx := context.Background()
-	go func() {
-		if err := leaderboardUseCase.StartBroadcasting(ctx); err != nil {
-			l.Errorf(ctx, "Broadcast service error: %v", err)
-		}
-	}()
+	scoreUseCase := leaderboardApp.NewScoreUseCase(persistenceRepo, cacheRepo, leaderboardUserRepo, broadcastService, l)
+	leaderboardUseCase := leaderboardApp.NewLeaderboardUseCase(cacheRepo, persistenceRepo, leaderboardUserRepo, broadcastService, l)
 
 	// Initialize handlers
-	authHandler := v1Auth.NewHandler(authUseCase)
-	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase)
+	authHandler := v1Auth.NewHandler(authUseCase, l)
+	leaderboardHandler := v1Leaderboard.NewLeaderboardHandler(leaderboardUseCase, scoreUseCase, l)
 
 	// Setup router
 	router := setupRouter(cfg, l, authUseCase, authHandler, leaderboardHandler)
@@ -130,7 +122,7 @@ func main() {
 func setupRouter(
 	cfg *config.Config,
 	l *logger.Logger,
-	authUseCase *authApp.AuthUseCase,
+	authUseCase authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) *gin.Engine {
@@ -164,7 +156,7 @@ func setupRouter(
 func setupAPIRouter(
 	router *gin.Engine,
 	l *logger.Logger,
-	authUseCase *authApp.AuthUseCase,
+	authUseCase authApp.AuthUseCase,
 	authHandler *v1Auth.Handler,
 	leaderboardHandler *v1Leaderboard.LeaderboardHandler,
 ) {
@@ -204,7 +196,9 @@ func setupAPIRouter(
 	}
 
 	// Protected routes group (auth required)
-	authMiddleware := middleware.NewAuthMiddleware(authUseCase.ValidateToken)
+	authMiddleware := middleware.NewAuthMiddleware(func(ctx context.Context, token string) (string, error) {
+		return authUseCase.ValidateToken(ctx, token)
+	}, l)
 	v1ProtectedGroup := v1Group.Group("")
 	v1ProtectedGroup.Use(authMiddleware.RequireAuth())
 	{
