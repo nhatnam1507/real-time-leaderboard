@@ -10,7 +10,6 @@ import (
 
 	"real-time-leaderboard/internal/module/leaderboard/infrastructure/mocks"
 	"real-time-leaderboard/internal/shared/logger"
-	"real-time-leaderboard/internal/shared/response"
 )
 
 func TestScoreUseCase_SubmitScore_WhenValidRequest_ShouldUpdateScoreAndBroadcastEntry(t *testing.T) {
@@ -85,11 +84,8 @@ func TestScoreUseCase_SubmitScore_WhenPersistenceFails_ShouldReturnInternalError
 
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
-	require.Contains(t, appErr.Message, "Failed to update score")
+	require.Contains(t, err.Error(), "failed to update score")
+	require.Contains(t, err.Error(), "database error")
 }
 
 func TestScoreUseCase_SubmitScore_WhenCacheUpdateFails_ShouldReturnNilError(t *testing.T) {

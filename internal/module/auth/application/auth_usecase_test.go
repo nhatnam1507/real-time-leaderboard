@@ -12,7 +12,6 @@ import (
 	"real-time-leaderboard/internal/module/auth/domain"
 	"real-time-leaderboard/internal/module/auth/infrastructure/mocks"
 	"real-time-leaderboard/internal/shared/logger"
-	"real-time-leaderboard/internal/shared/response"
 )
 
 func TestAuthUseCase_Register_WhenValidRequest_ShouldCreateUserAndReturnTokens(t *testing.T) {
@@ -100,11 +99,8 @@ func TestAuthUseCase_Register_WhenUsernameExists_ShouldReturnConflictError(t *te
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeConflict, appErr.Code)
-	require.Contains(t, appErr.Message, "Username already exists")
+	require.True(t, errors.Is(err, domain.ErrUserAlreadyExists))
+	require.Contains(t, err.Error(), "username")
 }
 
 func TestAuthUseCase_Register_WhenEmailExists_ShouldReturnConflictError(t *testing.T) {
@@ -140,11 +136,8 @@ func TestAuthUseCase_Register_WhenEmailExists_ShouldReturnConflictError(t *testi
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeConflict, appErr.Code)
-	require.Contains(t, appErr.Message, "Email already exists")
+	require.True(t, errors.Is(err, domain.ErrUserAlreadyExists))
+	require.Contains(t, err.Error(), "email")
 }
 
 func TestAuthUseCase_Register_WhenGetByUsernameFails_ShouldReturnInternalError(t *testing.T) {
@@ -176,10 +169,8 @@ func TestAuthUseCase_Register_WhenGetByUsernameFails_ShouldReturnInternalError(t
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
+	require.Contains(t, err.Error(), "failed to check username existence")
+	require.Contains(t, err.Error(), "database error")
 }
 
 func TestAuthUseCase_Register_WhenCreateFails_ShouldReturnInternalError(t *testing.T) {
@@ -219,10 +210,8 @@ func TestAuthUseCase_Register_WhenCreateFails_ShouldReturnInternalError(t *testi
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
+	require.Contains(t, err.Error(), "failed to create user")
+	require.Contains(t, err.Error(), "database error")
 }
 
 func TestAuthUseCase_Register_WhenGenerateTokenFails_ShouldReturnInternalError(t *testing.T) {
@@ -270,10 +259,8 @@ func TestAuthUseCase_Register_WhenGenerateTokenFails_ShouldReturnInternalError(t
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
+	require.Contains(t, err.Error(), "failed to generate tokens")
+	require.Contains(t, err.Error(), "token generation error")
 }
 
 func TestAuthUseCase_Login_WhenValidCredentials_ShouldReturnUserAndTokens(t *testing.T) {
@@ -353,11 +340,8 @@ func TestAuthUseCase_Login_WhenUserNotFound_ShouldReturnUnauthorizedError(t *tes
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "Invalid credentials")
+	require.True(t, errors.Is(err, domain.ErrInvalidCredentials))
+	require.Contains(t, err.Error(), "invalid credentials")
 }
 
 func TestAuthUseCase_Login_WhenWrongPassword_ShouldReturnUnauthorizedError(t *testing.T) {
@@ -395,11 +379,8 @@ func TestAuthUseCase_Login_WhenWrongPassword_ShouldReturnUnauthorizedError(t *te
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "Invalid credentials")
+	require.True(t, errors.Is(err, domain.ErrInvalidCredentials))
+	require.Contains(t, err.Error(), "invalid credentials")
 }
 
 func TestAuthUseCase_Login_WhenGetByUsernameFails_ShouldReturnInternalError(t *testing.T) {
@@ -430,10 +411,8 @@ func TestAuthUseCase_Login_WhenGetByUsernameFails_ShouldReturnInternalError(t *t
 	require.Error(t, err)
 	require.Nil(t, user)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
+	require.Contains(t, err.Error(), "failed to get user")
+	require.Contains(t, err.Error(), "database error")
 }
 
 func TestAuthUseCase_ValidateToken_WhenValidToken_ShouldReturnUserID(t *testing.T) {
@@ -487,11 +466,8 @@ func TestAuthUseCase_ValidateToken_WhenInvalidToken_ShouldReturnUnauthorizedErro
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
 	require.Empty(t, userID)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "Invalid or expired token")
+	require.True(t, errors.Is(err, domain.ErrInvalidToken))
+	require.Contains(t, err.Error(), "invalid or expired token")
 }
 
 func TestAuthUseCase_ValidateToken_WhenUserNotFound_ShouldReturnUnauthorizedError(t *testing.T) {
@@ -521,11 +497,8 @@ func TestAuthUseCase_ValidateToken_WhenUserNotFound_ShouldReturnUnauthorizedErro
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
 	require.Empty(t, userID)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "User not found")
+	require.True(t, errors.Is(err, domain.ErrUserNotFound))
+	require.Contains(t, err.Error(), "user not found")
 }
 
 func TestAuthUseCase_RefreshToken_WhenValidRefreshToken_ShouldReturnNewTokenPair(t *testing.T) {
@@ -589,11 +562,9 @@ func TestAuthUseCase_RefreshToken_WhenInvalidRefreshToken_ShouldReturnUnauthoriz
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "Invalid or expired refresh token")
+	require.True(t, errors.Is(err, domain.ErrInvalidToken))
+	require.Contains(t, err.Error(), "invalid or expired token")
+	require.Contains(t, err.Error(), "refresh")
 }
 
 func TestAuthUseCase_RefreshToken_WhenUserNotFound_ShouldReturnUnauthorizedError(t *testing.T) {
@@ -623,9 +594,6 @@ func TestAuthUseCase_RefreshToken_WhenUserNotFound_ShouldReturnUnauthorizedError
 	// ── Assert ──────────────────────────────────────────────────────────
 	require.Error(t, err)
 	require.Nil(t, tokenPair)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeUnauthorized, appErr.Code)
-	require.Contains(t, appErr.Message, "User not found")
+	require.True(t, errors.Is(err, domain.ErrUserNotFound))
+	require.Contains(t, err.Error(), "user not found")
 }

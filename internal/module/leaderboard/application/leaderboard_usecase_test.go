@@ -8,10 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"real-time-leaderboard/internal/module/leaderboard/infrastructure/mocks"
 	"real-time-leaderboard/internal/module/leaderboard/domain"
+	"real-time-leaderboard/internal/module/leaderboard/infrastructure/mocks"
 	"real-time-leaderboard/internal/shared/logger"
-	"real-time-leaderboard/internal/shared/response"
 )
 
 func TestLeaderboardUseCase_SyncFromPostgres_WhenRedisEmpty_ShouldSyncAllEntries(t *testing.T) {
@@ -213,11 +212,8 @@ func TestLeaderboardUseCase_GetFullLeaderboard_WhenGetTopPlayersFails_ShouldRetu
 	require.Error(t, err)
 	require.Nil(t, entries)
 	require.Equal(t, int64(0), total)
-
-		var appErr *response.APIError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, response.CodeInternal, appErr.Code)
-	require.Contains(t, appErr.Message, "Failed to retrieve leaderboard")
+	require.Contains(t, err.Error(), "failed to retrieve leaderboard")
+	require.Contains(t, err.Error(), "redis error")
 }
 
 func TestLeaderboardUseCase_GetFullLeaderboard_WhenGetTotalPlayersFails_ShouldUseEntriesLength(t *testing.T) {
