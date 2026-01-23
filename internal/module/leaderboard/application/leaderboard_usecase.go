@@ -13,8 +13,6 @@ import (
 
 // LeaderboardUseCase defines the interface for leaderboard operations
 type LeaderboardUseCase interface {
-	SyncFromPostgres(ctx context.Context) error
-	GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error)
 	GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error)
 	SubscribeToEntryUpdates(ctx context.Context) (<-chan *domain.LeaderboardEntry, error)
 }
@@ -47,71 +45,48 @@ func NewLeaderboardUseCase(
 	}
 }
 
-// SyncFromPostgres syncs all leaderboard entries from PostgreSQL to Redis
-// Called lazily when Redis is empty. UpdateScore doesn't publish, so no broadcasts triggered.
-func (uc *leaderboardUseCase) SyncFromPostgres(ctx context.Context) error {
+// GetLeaderboard retrieves a paginated leaderboard with username enrichment.
+// Read-through: uses cache when available; on cache miss loads from persistence, backfills cache, and returns paginated slice.
+func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
-	if err != nil || total > 0 {
-		return err
+	if err != nil {
+		uc.logger.Errorf(ctx, "Failed to get total players: %v", err)
+		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
+	}
+
+	if total > 0 {
+		entries, err := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
+		if err != nil {
+			uc.logger.Errorf(ctx, "Failed to get paginated leaderboard: %v", err)
+			return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
+		}
+		if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
+			uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
+		}
+		return entries, total, nil
 	}
 
 	entries, err := uc.persistenceRepo.GetLeaderboard(ctx)
 	if err != nil {
-		return err
+		uc.logger.Errorf(ctx, "Failed to get leaderboard from persistence: %v", err)
+		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
 	}
-
-	for _, entry := range entries {
-		if err := uc.cacheRepo.UpdateScore(ctx, entry.UserID, entry.Score); err != nil {
-			uc.logger.Warnf(ctx, "Failed to sync score for user %s: %v", entry.UserID, err)
+	for _, e := range entries {
+		if err := uc.cacheRepo.UpdateScore(ctx, e.UserID, e.Score); err != nil {
+			uc.logger.Warnf(ctx, "Failed to backfill cache for user %s: %v", e.UserID, err)
 		}
 	}
 
-	if len(entries) > 0 {
-		uc.logger.Infof(ctx, "Synced %d leaderboard entries from PostgreSQL to Redis", len(entries))
+	total = int64(len(entries))
+	o, l := int(offset), int(limit)
+	if o >= len(entries) {
+		return []domain.LeaderboardEntry{}, total, nil
 	}
-	return nil
-}
-
-// GetFullLeaderboard retrieves the full leaderboard with username enrichment
-func (uc *leaderboardUseCase) GetFullLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, int64, error) {
-	entries, err := uc.cacheRepo.GetTopPlayers(ctx, 1000, 0)
-	if err != nil {
-		uc.logger.Errorf(ctx, "Failed to get full leaderboard: %v", err)
-		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
+	end := o + l
+	if end > len(entries) {
+		end = len(entries)
 	}
-
-	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
-	if err != nil {
-		uc.logger.Warnf(ctx, "Failed to get total players: %v", err)
-		total = int64(len(entries))
-	}
-
-	if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
-		uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
-	}
-
-	return entries, total, nil
-}
-
-// GetLeaderboard retrieves a paginated leaderboard with username enrichment
-func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
-	entries, err := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
-	if err != nil {
-		uc.logger.Errorf(ctx, "Failed to get paginated leaderboard: %v", err)
-		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
-	}
-
-	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
-	if err != nil {
-		uc.logger.Warnf(ctx, "Failed to get total players: %v", err)
-		total = int64(len(entries))
-	}
-
-	if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
-		uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
-	}
-
-	return entries, total, nil
+	return entries[o:end], total, nil
 }
 
 func (uc *leaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {

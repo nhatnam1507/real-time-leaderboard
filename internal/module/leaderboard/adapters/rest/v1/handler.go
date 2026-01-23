@@ -61,8 +61,6 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
-
 	normalized := pagination.Normalize()
 	entries, total, err := h.leaderboardUseCase.GetLeaderboard(ctx, normalized.GetLimit(), normalized.GetOffset())
 	if err != nil {
@@ -84,11 +82,7 @@ func (h *LeaderboardHandler) GetLeaderboardUpdate(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no") // Disable nginx buffering
 
-	// Create context for the request
 	ctx := c.Request.Context()
-
-	// Sync from PostgreSQL to Redis if needed (lazy loading)
-	_ = h.leaderboardUseCase.SyncFromPostgres(ctx)
 
 	// Subscribe to entry delta updates
 	updateCh, err := h.leaderboardUseCase.SubscribeToEntryUpdates(ctx)
@@ -141,8 +135,9 @@ func (h *LeaderboardHandler) GetLeaderboardUpdate(c *gin.Context) {
 func (h *LeaderboardHandler) SubmitScore(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		apiErr := response.NewUnauthorizedError("User ID not found in context")
-		h.logger.Error(c.Request.Context(), apiErr.Error())
+		// Auth middleware already validated the request; missing user_id indicates a server-side bug.
+		apiErr := response.NewInternalError("An unexpected error occurred")
+		h.logger.Error(c.Request.Context(), "user_id missing from context after RequireAuth")
 		response.Error(c, apiErr)
 		return
 	}

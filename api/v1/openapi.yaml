@@ -151,11 +151,8 @@ paths:
         - leaderboard
       summary: Get leaderboard with pagination
       description: |
-        Retrieve the leaderboard with pagination support. This endpoint is used for initial dashboard load.
-        Returns a paginated list of leaderboard entries sorted by rank (highest score first).
-        
-        **Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL
-        on the first request, ensuring seed data and existing scores are available.
+        Paginated leaderboard (highest score first). Read-through: reads from cache first;
+        on cache miss loads from PostgreSQL, backfills cache, and returns.
       parameters:
         - name: limit
           in: query
@@ -210,15 +207,9 @@ paths:
         - leaderboard
       summary: Update score
       description: |
-        Update the score for the authenticated user. Requires authentication.
-        Uses UPSERT pattern - automatically creates the record if it doesn't exist, or updates if it exists.
-        The score will be saved in PostgreSQL (persistent storage) and updated in Redis (cache).
-        
-        **Broadcast Optimization**: After successful update, if the user's rank is within the top 1000,
-        a leaderboard entry delta update is published to the `leaderboard:viewer:updates` topic.
-        Entries ranked outside the top 1000 are not broadcasted to reduce network traffic.
-        
-        Returns the user ID and updated score.
+        Update the authenticated user's score. Write-through: updates Redis (cache) first, then PostgreSQL (persistence); both must succeed.
+        UPSERT semantics. If rank ≤ 1000, an entry delta is published to `leaderboard:viewer:updates`.
+        Returns user_id and score.
       security:
         - BearerAuth: []
       requestBody:
@@ -266,22 +257,9 @@ paths:
         - leaderboard
       summary: Get leaderboard delta updates (SSE stream)
       description: |
-        Server-Sent Events (SSE) stream for real-time leaderboard entry delta updates.
-        Returns `text/event-stream` content type. Clients receive delta updates (single entry changes)
-        when scores change. Updates are pushed via Redis pub/sub notifications - no polling required.
-        
-        **Usage Pattern**: 
-        1. Load initial leaderboard using GET /leaderboard
-        2. Connect to this SSE stream to receive delta updates
-        3. Merge delta updates into local leaderboard state
-        4. If SSE disconnects, reload from GET /leaderboard
-        
-        **Lazy Loading**: If Redis is empty, the system automatically syncs data from PostgreSQL
-        on the first request, ensuring seed data and existing scores are available.
-        
-        **Broadcast Optimization**: Only entries ranked within the top 1000 trigger broadcasts.
-        Entries ranked outside this range are not sent to reduce network traffic, as they are
-        unlikely to be relevant to clients viewing top N leaderboards.
+        SSE stream (`text/event-stream`) of entry delta updates. Data comes only from pub/sub when scores change; no cache or persistence reads.
+        Usage: (1) Load initial state with GET /leaderboard; (2) Connect here and merge deltas; (3) On disconnect, reload from GET /leaderboard.
+        Only rank ≤ 1000 triggers publishes.
       responses:
         '200':
           description: |
