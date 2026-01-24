@@ -46,7 +46,7 @@ func NewLeaderboardUseCase(
 }
 
 // GetLeaderboard retrieves a paginated leaderboard with username enrichment.
-// Read-through: uses cache when available; on cache miss loads from persistence, backfills cache, and returns paginated slice.
+// Cache-aside strategy: uses cache when populated; on global cache miss loads from persistence, backfills cache, and returns a paginated slice from the fresh data.
 func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
 	if err != nil {

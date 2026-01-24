@@ -120,7 +120,7 @@ The system implements JWT-based authentication with automatic token management:
 - **Infrastructure**: PostgreSQL (persistence) and Redis (cache) repositories, Redis broadcast service
 
 **Endpoints**:
-- `GET /api/v1/leaderboard?limit=10&offset=0` - Paginated leaderboard (read-through: cache first, PostgreSQL on miss)
+- `GET /api/v1/leaderboard?limit=10&offset=0` - Paginated leaderboard (cache-aside: cache first, PostgreSQL on global miss)
 - `GET /api/v1/leaderboard/stream` - SSE stream for entry deltas only (pubsub, no cache/persistence reads)
 - `PUT /api/v1/leaderboard/score` - Update score (write-through; requires auth)
 
@@ -192,11 +192,11 @@ sequenceDiagram
 ```
 
 **Behavior**:
-- **GET /leaderboard**: Read-through. Use case: if cache has data → `GetTopPlayers` + enrich; if cache empty → `GetLeaderboard` from PostgreSQL, backfill cache, return paginated. Handler only calls `GetLeaderboard(limit, offset)`.
+- **GET /leaderboard**: Cache-aside. Use case: if cache has data → `GetTopPlayers` + enrich; if cache empty → `GetLeaderboard` from PostgreSQL, backfill cache, return paginated. Handler only calls `GetLeaderboard(limit, offset)`.
 - **GET /leaderboard/stream**: Pubsub only. Use case: `SubscribeToEntryUpdates` (no cache or persistence). Handler: set SSE headers, call `SubscribeToEntryUpdates`, loop on channel. Clients must load initial state via GET /leaderboard first.
 - **PUT /leaderboard/score**: Write-through. Use case: `UpdateScore` (cache) then `UpsertScore` (persistence); both must succeed. Then get rank, optionally broadcast if rank ≤ 1000.
 
-**Characteristics**: Read-through and write-through; stream is pubsub-only; broadcast only for rank ≤ 1000; `/leaderboard` and `/leaderboard/stream` are independent.
+**Characteristics**: Cache-aside for reads and write-through for writes; stream is pubsub-only; broadcast only for rank ≤ 1000; `/leaderboard` and `/leaderboard/stream` are independent.
 
 ### Infrastructure
 
