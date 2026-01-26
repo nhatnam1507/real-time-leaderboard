@@ -1,43 +1,67 @@
-# Application Features & Flows
+# Application Overview
 
-This document describes the general application features and high-level flows from a system-wide perspective.
+This document provides a high-level overview of the Real-Time Leaderboard System, its capabilities, and component architecture.
 
-## Features Overview
+## What It Does
 
-The Real-Time Leaderboard System provides the following general features:
+The Real-Time Leaderboard System is a web application that enables:
 
-- **Modular Architecture**: Self-contained modules following Clean Architecture principles
-- **JWT Authentication**: Token-based authentication with access and refresh tokens
-- **Real-Time Updates**: Server-Sent Events (SSE) for live data updates
-- **Data Persistence**: PostgreSQL for persistent storage with Redis for caching
-- **Scalable Design**: Supports multiple server instances with distributed coordination
-- **Microservice Ready**: Each module is self-contained and can be extracted to a microservice
+- **User Authentication**: Users can register, login, and manage their accounts with JWT-based authentication
+- **Score Management**: Authenticated users can submit and update their scores
+- **Leaderboard Display**: View paginated leaderboards showing top players ranked by score
+- **Real-Time Updates**: Live leaderboard updates via Server-Sent Events (SSE) when scores change
+- **Scalable Architecture**: Designed to support multiple server instances with distributed coordination
 
-For detailed module-specific features and flows, see [Modules](./modules.md).
+## System Components
 
-## General Application Flow
+The system consists of **2 main modules** and **shared infrastructure**:
 
-The application follows a modular architecture where each module operates independently:
+### Modules
+
+1. **Auth Module** - Handles user authentication and authorization
+2. **Leaderboard Module** - Manages scores, leaderboard queries, and real-time updates
+
+### Shared Infrastructure
+
+- **API Router** - HTTP request routing and middleware
+- **Database** - PostgreSQL for persistent data storage
+- **Cache** - Redis for high-performance caching and real-time messaging
+- **Logger** - Centralized logging system
+- **Middleware** - Request processing, authentication, CORS, error handling
+
+## Component Interaction
+
+The following diagram shows how the main components interact:
 
 ```mermaid
 graph TB
-    Client[Client Request] --> Router[API Router]
-    Router --> Auth[Auth Module]
-    Router --> Leaderboard[Leaderboard Module]
-    Auth --> AuthDB[(PostgreSQL)]
-    Leaderboard --> LeaderboardDB[(PostgreSQL)]
-    Leaderboard --> Cache[(Redis)]
-    Leaderboard --> Broadcast[Broadcast Service]
-    Broadcast --> SSE[SSE Clients]
+    Client[Client Applications] --> Router[API Router]
+    
+    Router --> AuthModule[Auth Module]
+    Router --> LeaderboardModule[Leaderboard Module]
+    
+    AuthModule --> Database[(Database)]
+    LeaderboardModule --> Database
+    LeaderboardModule --> Cache[(Cache)]
+    LeaderboardModule --> Broadcast[Broadcast Service]
+    
+    Broadcast --> Cache
+    Broadcast --> Clients[Real-Time Clients]
+    
+    Router --> Middleware[Shared Middleware]
+    AuthModule --> Logger[Shared Logger]
+    LeaderboardModule --> Logger
 ```
 
-**Key Principles**:
-- **Module Independence**: Each module is self-contained with its own domain, application logic, and infrastructure
-- **Shared Infrastructure**: Common concerns (logging, middleware, database connections) are shared across modules
-- **Clean Architecture**: Each module follows Clean Architecture principles with clear layer separation
-- **Cross-Module Communication**: Modules communicate through well-defined interfaces, not direct dependencies
+**Component Relationships**:
+- **Client Applications** communicate with the system through the **API Router**
+- **API Router** routes requests to appropriate **Modules** based on the endpoint
+- **Auth Module** handles authentication and stores user data in the **Database**
+- **Leaderboard Module** uses both **Database** (persistence) and **Cache** (performance) for data storage
+- **Broadcast Service** uses **Cache** for message distribution and sends updates to **Real-Time Clients**
+- All components use **Shared Middleware** and **Shared Logger** for common functionality
 
-For detailed module-specific flows, see [Modules](./modules.md).
+For detailed module-specific flows and implementation details, see [Modules](./modules.md).
 
 ## API Documentation
 
