@@ -287,11 +287,17 @@ func (r *Repo) GetLeaderboard(...) ([]domain.LeaderboardEntry, error) {
 
 **Orchestrate Business Logic**: Use cases orchestrate by calling multiple repositories/services.
 ```go
-// ✅ Good - orchestrates, enriches domain objects
+// ✅ Good - orchestrates, enriches domain objects, cache-aside pattern
 func (uc *UseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
-    entries, _ := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
-    usernames, _ := uc.userRepo.GetByIDs(ctx, extractUserIDs(entries))
-    enrichEntries(entries, usernames)
+    // Try cache first
+    entries, total, err := uc.cacheRepo.GetLeaderboard(ctx, limit, offset)
+    if err == nil && total > 0 {
+        enrichEntries(entries, usernames)
+        return entries, total, nil
+    }
+    // Cache miss - fallback to database (paginated)
+    entries, total, err = uc.persistenceRepo.GetLeaderboard(ctx, limit, offset)
+    // Backfill cache with fetched entries
     return entries, total, nil
 }
 ```
