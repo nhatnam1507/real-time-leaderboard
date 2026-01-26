@@ -21,15 +21,11 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHit_ShouldReturnFromCacheAnd
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(2), nil).
-		Times(1)
-	mockCacheRepo.EXPECT().
-		GetTopPlayers(ctx, int64(10), int64(0)).
+		GetLeaderboard(ctx, int64(10), int64(0)).
 		Return([]domain.LeaderboardEntry{
 			{UserID: "user-1", Score: 1000, Rank: 1},
 			{UserID: "user-2", Score: 500, Rank: 2},
-		}, nil).
+		}, int64(2), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
@@ -63,8 +59,8 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(2), int64(0)).
+		Return(nil, int64(0), errors.New("cache miss")).
 		Times(1)
 	mockCacheRepo.EXPECT().
 		UpdateScore(ctx, "user-1", int64(1000)).
@@ -74,22 +70,22 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 		UpdateScore(ctx, "user-2", int64(500)).
 		Return(nil).
 		Times(1)
-	mockCacheRepo.EXPECT().
-		UpdateScore(ctx, "user-3", int64(250)).
-		Return(nil).
-		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
+		GetLeaderboard(ctx, int64(2), int64(0)).
 		Return([]domain.LeaderboardEntry{
 			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
 			{UserID: "user-2", Username: "bob", Score: 500, Rank: 2},
-			{UserID: "user-3", Username: "carol", Score: 250, Rank: 3},
-		}, nil).
+		}, int64(3), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1", "user-2"}).
+		Return(map[string]string{"user-1": "alice", "user-2": "bob"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -106,7 +102,7 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 	require.Equal(t, "user-2", entries[1].UserID)
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturnError(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheGetLeaderboardFails_ShouldFallbackToDatabase(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -114,12 +110,28 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturn
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), errors.New("redis error")).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("redis error")).
+		Times(1)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-1", int64(1000)).
+		Return(nil).
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+		}, int64(1), nil).
+		Times(1)
+
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1"}).
+		Return(map[string]string{"user-1": "alice"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -129,13 +141,13 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturn
 	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.Error(t, err)
-	require.Nil(t, entries)
-	require.Equal(t, int64(0), total)
-	require.Contains(t, err.Error(), "redis error")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", entries[0].Username)
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_ShouldReturnError(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetLeaderboardFails_ShouldFallbackToDatabase(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -143,16 +155,28 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_Should
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(2), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("redis error")).
 		Times(1)
 	mockCacheRepo.EXPECT().
-		GetTopPlayers(ctx, int64(10), int64(0)).
-		Return(nil, errors.New("redis error")).
+		UpdateScore(ctx, "user-1", int64(1000)).
+		Return(nil).
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+		}, int64(1), nil).
+		Times(1)
+
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1"}).
+		Return(map[string]string{"user-1": "alice"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -162,9 +186,10 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_Should
 	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.Error(t, err)
-	require.Nil(t, entries)
-	require.Equal(t, int64(0), total)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", entries[0].Username)
 }
 
 func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_ShouldReturnError(t *testing.T) {
@@ -175,14 +200,14 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_Shou
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("cache miss")).
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
-		Return(nil, errors.New("database error")).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("database error")).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
@@ -201,6 +226,51 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_Shou
 	require.Contains(t, err.Error(), "database error")
 }
 
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheEmpty_ShouldFallbackToDatabase(t *testing.T) {
+	// ── Arrange ────────────────────────────────────────────────────────
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
+		Times(1)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-1", int64(1000)).
+		Return(nil).
+		Times(1)
+
+	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+		}, int64(1), nil).
+		Times(1)
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1"}).
+		Return(map[string]string{"user-1": "alice"}, nil).
+		Times(1)
+
+	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
+
+	logger := logger.New("info", false)
+	uc := NewLeaderboardUseCase(mockCacheRepo, mockPersistenceRepo, mockUserRepo, mockBroadcastService, logger)
+
+	// ── Act ─────────────────────────────────────────────────────────────
+	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
+
+	// ── Assert ──────────────────────────────────────────────────────────
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", entries[0].Username)
+}
+
 func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissEmpty_ShouldReturnEmpty(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
@@ -209,14 +279,14 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissEmpty_ShouldReturnEmpty(
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("cache miss")).
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
-		Return([]domain.LeaderboardEntry{}, nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)

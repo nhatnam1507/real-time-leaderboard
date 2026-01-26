@@ -34,14 +34,21 @@ func (r *RedisLeaderboardRepository) UpdateScore(ctx context.Context, userID str
 	return nil
 }
 
-// GetTopPlayers retrieves the top N players from the leaderboard with offset support
-func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error) {
+// GetLeaderboard retrieves a paginated leaderboard with total count
+func (r *RedisLeaderboardRepository) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	start := offset
 	stop := offset + limit - 1
 
+	// Get total count
+	total, err := r.client.ZCard(ctx, domain.RedisLeaderboardKey).Result()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get total players: %w", err)
+	}
+
+	// Get paginated entries
 	results, err := r.client.ZRevRangeWithScores(ctx, domain.RedisLeaderboardKey, start, stop).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get top players: %w", err)
+		return nil, 0, fmt.Errorf("failed to get top players: %w", err)
 	}
 
 	entries := make([]domain.LeaderboardEntry, 0, len(results))
@@ -60,17 +67,7 @@ func (r *RedisLeaderboardRepository) GetTopPlayers(ctx context.Context, limit, o
 		})
 	}
 
-	return entries, nil
-}
-
-// GetTotalPlayers retrieves the total number of players in the leaderboard
-func (r *RedisLeaderboardRepository) GetTotalPlayers(ctx context.Context) (int64, error) {
-	count, err := r.client.ZCard(ctx, domain.RedisLeaderboardKey).Result()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get total players: %w", err)
-	}
-
-	return count, nil
+	return entries, total, nil
 }
 
 // GetUserRank retrieves the rank of a user in the leaderboard (1-indexed)

@@ -46,47 +46,44 @@ func NewLeaderboardUseCase(
 }
 
 // GetLeaderboard retrieves a paginated leaderboard with username enrichment.
-// Cache-aside strategy: uses cache when populated; on global cache miss loads from persistence, backfills cache, and returns a paginated slice from the fresh data.
+// Cache-aside strategy: tries cache first with limit/offset; on cache miss or empty cache loads paginated data from persistence, backfills cache with fetched entries, and returns results.
 func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
-	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
-	if err != nil {
-		uc.logger.Errorf(ctx, "Failed to get total players: %v", err)
-		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
-	}
-
-	if total > 0 {
-		entries, err := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
-		if err != nil {
-			uc.logger.Errorf(ctx, "Failed to get paginated leaderboard: %v", err)
-			return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
-		}
+	// Try cache first
+	entries, total, err := uc.cacheRepo.GetLeaderboard(ctx, limit, offset)
+	if err == nil && total > 0 {
+		// Cache hit with data - enrich and return
 		if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
 			uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
 		}
 		return entries, total, nil
 	}
 
-	entries, err := uc.persistenceRepo.GetLeaderboard(ctx)
+	// Cache miss, empty, or error - fallback to database
+	if err != nil {
+		uc.logger.Warnf(ctx, "Cache error, falling back to database: %v", err)
+	} else {
+		uc.logger.Warnf(ctx, "Cache empty, falling back to database")
+	}
+
+	entries, total, err = uc.persistenceRepo.GetLeaderboard(ctx, limit, offset)
 	if err != nil {
 		uc.logger.Errorf(ctx, "Failed to get leaderboard from persistence: %v", err)
 		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
 	}
+
+	// Backfill cache with fetched entries
 	for _, e := range entries {
 		if err := uc.cacheRepo.UpdateScore(ctx, e.UserID, e.Score); err != nil {
 			uc.logger.Warnf(ctx, "Failed to backfill cache for user %s: %v", e.UserID, err)
 		}
 	}
 
-	total = int64(len(entries))
-	o, l := int(offset), int(limit)
-	if o >= len(entries) {
-		return []domain.LeaderboardEntry{}, total, nil
+	// Enrich with usernames
+	if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
+		uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
 	}
-	end := o + l
-	if end > len(entries) {
-		end = len(entries)
-	}
-	return entries[o:end], total, nil
+
+	return entries, total, nil
 }
 
 func (uc *leaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {

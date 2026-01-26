@@ -81,18 +81,19 @@ func (m *MockLeaderboardPersistenceRepository) EXPECT() *MockLeaderboardPersiste
 }
 
 // GetLeaderboard mocks base method.
-func (m *MockLeaderboardPersistenceRepository) GetLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, error) {
+func (m *MockLeaderboardPersistenceRepository) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLeaderboard", ctx)
+	ret := m.ctrl.Call(m, "GetLeaderboard", ctx, limit, offset)
 	ret0, _ := ret[0].([]domain.LeaderboardEntry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetLeaderboard indicates an expected call of GetLeaderboard.
-func (mr *MockLeaderboardPersistenceRepositoryMockRecorder) GetLeaderboard(ctx any) *gomock.Call {
+func (mr *MockLeaderboardPersistenceRepositoryMockRecorder) GetLeaderboard(ctx, limit, offset any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboard", reflect.TypeOf((*MockLeaderboardPersistenceRepository)(nil).GetLeaderboard), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboard", reflect.TypeOf((*MockLeaderboardPersistenceRepository)(nil).GetLeaderboard), ctx, limit, offset)
 }
 
 // UpsertScore mocks base method.
@@ -133,34 +134,20 @@ func (m *MockLeaderboardCacheRepository) EXPECT() *MockLeaderboardCacheRepositor
 	return m.recorder
 }
 
-// GetTopPlayers mocks base method.
-func (m *MockLeaderboardCacheRepository) GetTopPlayers(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, error) {
+// GetLeaderboard mocks base method.
+func (m *MockLeaderboardCacheRepository) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTopPlayers", ctx, limit, offset)
+	ret := m.ctrl.Call(m, "GetLeaderboard", ctx, limit, offset)
 	ret0, _ := ret[0].([]domain.LeaderboardEntry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// GetTopPlayers indicates an expected call of GetTopPlayers.
-func (mr *MockLeaderboardCacheRepositoryMockRecorder) GetTopPlayers(ctx, limit, offset any) *gomock.Call {
+// GetLeaderboard indicates an expected call of GetLeaderboard.
+func (mr *MockLeaderboardCacheRepositoryMockRecorder) GetLeaderboard(ctx, limit, offset any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopPlayers", reflect.TypeOf((*MockLeaderboardCacheRepository)(nil).GetTopPlayers), ctx, limit, offset)
-}
-
-// GetTotalPlayers mocks base method.
-func (m *MockLeaderboardCacheRepository) GetTotalPlayers(ctx context.Context) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTotalPlayers", ctx)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTotalPlayers indicates an expected call of GetTotalPlayers.
-func (mr *MockLeaderboardCacheRepositoryMockRecorder) GetTotalPlayers(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalPlayers", reflect.TypeOf((*MockLeaderboardCacheRepository)(nil).GetTotalPlayers), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeaderboard", reflect.TypeOf((*MockLeaderboardCacheRepository)(nil).GetLeaderboard), ctx, limit, offset)
 }
 
 // GetUserRank mocks base method.
