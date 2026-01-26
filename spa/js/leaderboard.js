@@ -137,9 +137,26 @@ class LeaderboardManager {
 
     // Update limit - calls /leaderboard API but keeps stream open
     async updateLimit(newLimit) {
-        this.limit = newLimit;
-        // Call /leaderboard API with new limit
-        await this.loadInitialLeaderboard(newLimit);
+        // Find the closest valid option (5, 10, 50, 100) for the selector
+        const validLimits = [5, 10, 50, 100];
+        const closestValidLimit = validLimits.find(limit => limit >= newLimit) || validLimits[validLimits.length - 1];
+        
+        // Update the limit selector dropdown if it exists
+        const limitSelector = document.getElementById('leaderboard-limit');
+        if (limitSelector) {
+            limitSelector.value = closestValidLimit;
+        }
+        
+        // Use the closest valid limit for display, but ensure we load enough entries
+        this.limit = closestValidLimit;
+        
+        // Update localStorage if app exists
+        if (app && typeof app.setLeaderboardLimit === 'function') {
+            app.setLeaderboardLimit(this.limit);
+        }
+        
+        // Call /leaderboard API with the valid limit (which will be >= newLimit)
+        await this.loadInitialLeaderboard(this.limit);
         // Stream stays open - no need to reconnect
     }
 
@@ -181,8 +198,40 @@ class LeaderboardManager {
 
     handleEntryUpdate(entry) {
         // Always update the entry in local state (stream provides all updates)
-        // The renderLeaderboard() will filter based on current limit
         this.leaderboardEntries.set(entry.user_id, entry);
+        
+        // Check if this update is for the current user and if they've fallen out of displayed range
+        const currentUser = authManager.getCurrentUser();
+        if (currentUser && entry.user_id === currentUser.id) {
+            // Determine user's rank - use entry.rank if available, otherwise calculate from sorted entries
+            let userRank = entry.rank;
+            
+            if (!userRank || userRank <= 0) {
+                // Fallback: calculate rank from sorted entries
+                const allEntries = Array.from(this.leaderboardEntries.values())
+                    .sort((a, b) => {
+                        if (b.score !== a.score) {
+                            return b.score - a.score;
+                        }
+                        return a.user_id.localeCompare(b.user_id);
+                    });
+                
+                const userIndex = allEntries.findIndex(e => e.user_id === currentUser.id);
+                userRank = userIndex >= 0 ? userIndex + 1 : null;
+            }
+            
+            // If user's rank is now outside the displayed limit, reload with higher limit
+            // This ensures the displayed top N shows the actual top N, pushing the user out
+            if (userRank && userRank > this.limit) {
+                // Reload with at least (userRank) to show up to user's rank
+                // This pushes user out of the original top N display
+                // Use userRank (not userRank + 1) so user is visible but pushed out of top N
+                const newLimit = Math.max(userRank, this.limit + 1);
+                console.log(`User rank ${userRank} exceeds limit ${this.limit}, reloading with limit ${newLimit}`);
+                this.updateLimit(newLimit);
+                return; // updateLimit will call renderLeaderboard
+            }
+        }
         
         // Rebuild leaderboard from local state (will filter to top N)
         this.renderLeaderboard();

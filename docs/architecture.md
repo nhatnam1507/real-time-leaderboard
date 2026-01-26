@@ -287,18 +287,34 @@ func (r *Repo) GetLeaderboard(...) ([]domain.LeaderboardEntry, error) {
 
 **Orchestrate Business Logic**: Use cases orchestrate by calling multiple repositories/services.
 ```go
-// ✅ Good - orchestrates, enriches domain objects, cache-aside pattern
+// ✅ Good - orchestrates, enriches domain objects, cache-aside pattern with error/miss distinction
 func (uc *UseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
     // Try cache first
     entries, total, err := uc.cacheRepo.GetLeaderboard(ctx, limit, offset)
+    
+    // Cache hit: return immediately
     if err == nil && total > 0 {
         enrichEntries(entries, usernames)
         return entries, total, nil
     }
-    // Cache miss - fallback to database (paginated)
-    entries, total, err = uc.persistenceRepo.GetLeaderboard(ctx, limit, offset)
-    // Backfill cache with fetched entries
-    return entries, total, nil
+    
+    // Cache error: use persistence directly without backfilling
+    if err != nil {
+        entries, total, err := uc.persistenceRepo.GetLeaderboard(ctx, limit, offset)
+        enrichEntries(entries, usernames)
+        return entries, total, err
+    }
+    
+    // Cache miss: load up to MaxBroadcastRank, backfill cache, extract requested page
+    allEntries, total, err := uc.persistenceRepo.GetLeaderboard(ctx, MaxBroadcastRank, 0)
+    // Backfill all entries into cache
+    for _, e := range allEntries {
+        uc.cacheRepo.UpdateScore(ctx, e.UserID, e.Score)
+    }
+    // Extract and enrich only requested page
+    pageEntries := allEntries[offset:offset+limit]
+    enrichEntries(pageEntries, usernames)
+    return pageEntries, total, nil
 }
 ```
 

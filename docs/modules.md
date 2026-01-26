@@ -172,16 +172,26 @@ sequenceDiagram
     Viewer->>API: GET /leaderboard?limit=10&offset=0
     API->>UC: GetLeaderboard(limit, offset)
     UC->>Cache: GetLeaderboard(limit, offset)
-    alt cache hit (total > 0)
+    alt cache hit (err == nil && total > 0)
         Cache-->>UC: entries, total
-        UC->>UC: Enrich usernames
-    else cache miss/empty
+        UC->>UC: Enrich usernames (requested page)
+        UC-->>API: entries, total
+    else cache error (err != nil)
         UC->>Storage: GetLeaderboard(limit, offset)
         Storage-->>UC: entries, total (paginated)
-        UC->>Cache: Backfill (UpdateScore per fetched entry)
         UC->>UC: Enrich usernames
+        Note over UC: No cache backfill (cache is broken)
+        UC-->>API: entries, total
+    else cache miss (err == nil && total == 0)
+        UC->>Storage: GetLeaderboard(MaxBroadcastRank, 0)
+        Storage-->>UC: allEntries (up to MaxBroadcastRank), total
+        loop For each entry
+            UC->>Cache: UpdateScore (backfill)
+        end
+        UC->>UC: Extract requested page from allEntries
+        UC->>UC: Enrich usernames (requested page only)
+        UC-->>API: pageEntries, total
     end
-    UC-->>API: entries, total
     API-->>Viewer: 200 + pagination meta
     
     Note over Viewer: GET /leaderboard/stream (pubsub only)
@@ -194,7 +204,10 @@ sequenceDiagram
 ```
 
 **Behavior**:
-- **GET /leaderboard**: Cache-aside strategy. Use case: tries cache first with `GetLeaderboard(limit, offset)`; if cache returns data (total > 0), enriches and returns; if cache miss/empty, calls `GetLeaderboard(limit, offset)` from PostgreSQL (paginated), backfills cache with fetched entries only, enriches, and returns. Both cache and persistence repositories use pagination at the database level (no in-memory pagination). Handler only calls `GetLeaderboard(limit, offset)`.
+- **GET /leaderboard**: Cache-aside strategy with three distinct paths:
+  - **Cache hit** (`err == nil && total > 0`): Returns immediately after enriching the requested page with usernames.
+  - **Cache error** (`err != nil`): Uses persistence directly with the requested `limit` and `offset`, enriches and returns. Does not backfill cache (cache is broken).
+  - **Cache miss** (`err == nil && total == 0`): Loads up to `MaxBroadcastRank` (1000) entries from PostgreSQL, backfills all loaded entries into cache, extracts the requested page from the loaded entries, enriches only the requested page with usernames, and returns. This ensures subsequent requests for any limit ≤ `MaxBroadcastRank` will be served from cache.
 - **GET /leaderboard/stream**: Pubsub only. Use case: `SubscribeToEntryUpdates` (no cache or persistence). Handler: set SSE headers, call `SubscribeToEntryUpdates`, loop on channel. Clients must load initial state via GET /leaderboard first.
 - **PUT /leaderboard/score**: Write-through. Use case: `UpdateScore` (cache) then `UpsertScore` (persistence); both must succeed. Then get rank, optionally broadcast if rank ≤ 1000.
 
@@ -212,4 +225,4 @@ sequenceDiagram
 
 **PostgreSQL (persistence)**: 
 - `leaderboard` table; `UpsertScore`, `GetLeaderboard(limit, offset)`.
-- `GetLeaderboard` uses SQL `LIMIT`/`OFFSET` for pagination and `COUNT(*) OVER()` window function to get total count in the same query. Only fetches the requested page, not all entries.
+- `GetLeaderboard` uses SQL `LIMIT`/`OFFSET` for pagination and `COUNT(*) OVER()` window function to get total count in the same query. On cache miss, loads up to `MaxBroadcastRank` entries to populate cache fully.
