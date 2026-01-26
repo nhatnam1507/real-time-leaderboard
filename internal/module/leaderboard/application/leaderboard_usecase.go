@@ -46,47 +46,71 @@ func NewLeaderboardUseCase(
 }
 
 // GetLeaderboard retrieves a paginated leaderboard with username enrichment.
-// Cache-aside strategy: uses cache when populated; on global cache miss loads from persistence, backfills cache, and returns a paginated slice from the fresh data.
+// Cache-aside strategy: tries cache first; on cache miss loads up to MaxBroadcastRank entries and backfills cache; on cache error uses persistence directly without backfilling.
 func (uc *leaderboardUseCase) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
-	total, err := uc.cacheRepo.GetTotalPlayers(ctx)
-	if err != nil {
-		uc.logger.Errorf(ctx, "Failed to get total players: %v", err)
-		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
-	}
-
-	if total > 0 {
-		entries, err := uc.cacheRepo.GetTopPlayers(ctx, limit, offset)
-		if err != nil {
-			uc.logger.Errorf(ctx, "Failed to get paginated leaderboard: %v", err)
-			return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
-		}
+	// Try cache first with requested limit/offset
+	entries, total, err := uc.cacheRepo.GetLeaderboard(ctx, limit, offset)
+	
+	// Cache hit: no error and cache has data
+	if err == nil && total > 0 {
+		// Cache hit - enrich and return requested page
 		if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
 			uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
 		}
 		return entries, total, nil
 	}
 
-	entries, err := uc.persistenceRepo.GetLeaderboard(ctx)
+	// Cache error: use persistence directly without backfilling (cache is broken)
+	if err != nil {
+		uc.logger.Warnf(ctx, "Cache error, using persistence directly: %v", err)
+		entries, total, err := uc.persistenceRepo.GetLeaderboard(ctx, limit, offset)
+		if err != nil {
+			uc.logger.Errorf(ctx, "Failed to get leaderboard from persistence: %v", err)
+			return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
+		}
+		// Enrich and return - don't backfill cache when it's broken
+		if err := uc.enrichEntriesWithUsernames(ctx, entries); err != nil {
+			uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
+		}
+		return entries, total, nil
+	}
+
+	// Cache miss (empty): load up to MaxBroadcastRank entries and backfill cache
+	uc.logger.Warnf(ctx, "Cache empty, loading full leaderboard from database and backfilling cache")
+	
+	// Load up to MaxBroadcastRank entries to populate cache fully
+	// This ensures subsequent requests for any limit <= MaxBroadcastRank will be served from cache
+	loadLimit := int64(domain.MaxBroadcastRank)
+	allEntries, total, err := uc.persistenceRepo.GetLeaderboard(ctx, loadLimit, 0)
 	if err != nil {
 		uc.logger.Errorf(ctx, "Failed to get leaderboard from persistence: %v", err)
 		return nil, 0, fmt.Errorf("failed to retrieve leaderboard: %w", err)
 	}
-	for _, e := range entries {
+
+	// Backfill cache with all loaded entries
+	for _, e := range allEntries {
 		if err := uc.cacheRepo.UpdateScore(ctx, e.UserID, e.Score); err != nil {
 			uc.logger.Warnf(ctx, "Failed to backfill cache for user %s: %v", e.UserID, err)
 		}
 	}
 
-	total = int64(len(entries))
+	// Extract requested page from loaded entries (entries are already ranked from persistence)
 	o, l := int(offset), int(limit)
-	if o >= len(entries) {
+	end := o + l
+	if end > len(allEntries) {
+		end = len(allEntries)
+	}
+	if o >= len(allEntries) {
 		return []domain.LeaderboardEntry{}, total, nil
 	}
-	end := o + l
-	if end > len(entries) {
-		end = len(entries)
+	
+	// Extract and enrich only the requested page entries
+	pageEntries := allEntries[o:end]
+	if err := uc.enrichEntriesWithUsernames(ctx, pageEntries); err != nil {
+		uc.logger.Warnf(ctx, "Failed to enrich entries with usernames: %v", err)
 	}
-	return entries[o:end], total, nil
+
+	return pageEntries, total, nil
 }
 
 func (uc *leaderboardUseCase) enrichEntriesWithUsernames(ctx context.Context, entries []domain.LeaderboardEntry) error {

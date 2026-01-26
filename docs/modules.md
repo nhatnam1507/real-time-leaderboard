@@ -119,6 +119,10 @@ The system implements JWT-based authentication with automatic token management:
 - **Adapters**: HTTP handlers, error mapper
 - **Infrastructure**: PostgreSQL (persistence) and Redis (cache) repositories, Redis broadcast service
 
+**Repository Interface Methods**:
+- `LeaderboardCacheRepository.GetLeaderboard(limit, offset)` - Returns paginated entries and total count in a single call
+- `LeaderboardPersistenceRepository.GetLeaderboard(limit, offset)` - Returns paginated entries and total count (uses SQL LIMIT/OFFSET and COUNT(*) OVER())
+
 **Endpoints**:
 - `GET /api/v1/leaderboard?limit=10&offset=0` - Paginated leaderboard (cache-aside: cache first, PostgreSQL on global miss)
 - `GET /api/v1/leaderboard/stream` - SSE stream for entry deltas only (pubsub, no cache/persistence reads)
@@ -164,22 +168,30 @@ sequenceDiagram
     participant Storage
     participant Broadcast
     
-    Note over Viewer: GET /leaderboard (read-through)
+    Note over Viewer: GET /leaderboard (cache-aside)
     Viewer->>API: GET /leaderboard?limit=10&offset=0
     API->>UC: GetLeaderboard(limit, offset)
-    UC->>Cache: GetTotalPlayers
-    Cache-->>UC: total
-    alt total > 0
-        UC->>Cache: GetTopPlayers
-        Cache-->>UC: entries
+    UC->>Cache: GetLeaderboard(limit, offset)
+    alt cache hit (err == nil && total > 0)
+        Cache-->>UC: entries, total
+        UC->>UC: Enrich usernames (requested page)
+        UC-->>API: entries, total
+    else cache error (err != nil)
+        UC->>Storage: GetLeaderboard(limit, offset)
+        Storage-->>UC: entries, total (paginated)
         UC->>UC: Enrich usernames
-    else total = 0
-        UC->>Storage: GetLeaderboard
-        Storage-->>UC: entries
-        UC->>Cache: Backfill (UpdateScore per entry)
-        UC->>UC: Paginate in memory
+        Note over UC: No cache backfill (cache is broken)
+        UC-->>API: entries, total
+    else cache miss (err == nil && total == 0)
+        UC->>Storage: GetLeaderboard(MaxBroadcastRank, 0)
+        Storage-->>UC: allEntries (up to MaxBroadcastRank), total
+        loop For each entry
+            UC->>Cache: UpdateScore (backfill)
+        end
+        UC->>UC: Extract requested page from allEntries
+        UC->>UC: Enrich usernames (requested page only)
+        UC-->>API: pageEntries, total
     end
-    UC-->>API: entries, total
     API-->>Viewer: 200 + pagination meta
     
     Note over Viewer: GET /leaderboard/stream (pubsub only)
@@ -192,9 +204,15 @@ sequenceDiagram
 ```
 
 **Behavior**:
-- **GET /leaderboard**: Cache-aside. Use case: if cache has data → `GetTopPlayers` + enrich; if cache empty → `GetLeaderboard` from PostgreSQL, backfill cache, return paginated. Handler only calls `GetLeaderboard(limit, offset)`.
+- **GET /leaderboard**: Cache-aside strategy with three distinct paths:
+  - **Cache hit** (`err == nil && total > 0`): Returns immediately after enriching the requested page with usernames.
+  - **Cache error** (`err != nil`): Uses persistence directly with the requested `limit` and `offset`, enriches and returns. Does not backfill cache (cache is broken).
+  - **Cache miss** (`err == nil && total == 0`): Loads up to `MaxBroadcastRank` (1000) entries from PostgreSQL, backfills all loaded entries into cache, extracts the requested page from the loaded entries, enriches only the requested page with usernames, and returns. This ensures subsequent requests for any limit ≤ `MaxBroadcastRank` will be served from cache.
 - **GET /leaderboard/stream**: Pubsub only. Use case: `SubscribeToEntryUpdates` (no cache or persistence). Handler: set SSE headers, call `SubscribeToEntryUpdates`, loop on channel. Clients must load initial state via GET /leaderboard first.
 - **PUT /leaderboard/score**: Write-through. Use case: `UpdateScore` (cache) then `UpsertScore` (persistence); both must succeed. Then get rank, optionally broadcast if rank ≤ 1000.
+
+**UI Behavior**:
+- When a user's score update causes them to fall outside the displayed top N (e.g., rank 6 when limit is 5), the UI automatically reloads the leaderboard with a higher limit (at least the user's rank) to push them out of the original top N display area. This ensures the displayed top N always shows the actual top N players.
 
 **Characteristics**: Cache-aside for reads and write-through for writes; stream is pubsub-only; broadcast only for rank ≤ 1000; `/leaderboard` and `/leaderboard/stream` are independent.
 
@@ -202,6 +220,9 @@ sequenceDiagram
 
 **Redis (cache)**:
 - Sorted set `leaderboard:global`: score, member=userID. `ZADD`, `ZREVRANGE`, `ZCARD`.
+- `GetLeaderboard(limit, offset)`: Uses `ZRevRangeWithScores` for paginated entries and `ZCard` for total count in a single call.
 - Pub/sub `leaderboard:viewer:updates`: entry-delta JSON. Only rank ≤ 1000 triggers publish.
 
-**PostgreSQL (persistence)**: `leaderboard` table; `UpsertScore`, `GetLeaderboard` (with usernames).
+**PostgreSQL (persistence)**: 
+- `leaderboard` table; `UpsertScore`, `GetLeaderboard(limit, offset)`.
+- `GetLeaderboard` uses SQL `LIMIT`/`OFFSET` for pagination and `COUNT(*) OVER()` window function to get total count in the same query. On cache miss, loads up to `MaxBroadcastRank` entries to populate cache fully.

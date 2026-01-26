@@ -21,15 +21,62 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHit_ShouldReturnFromCacheAnd
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(2), nil).
-		Times(1)
-	mockCacheRepo.EXPECT().
-		GetTopPlayers(ctx, int64(10), int64(0)).
+		GetLeaderboard(ctx, int64(10), int64(0)).
 		Return([]domain.LeaderboardEntry{
 			{UserID: "user-1", Score: 1000, Rank: 1},
 			{UserID: "user-2", Score: 500, Rank: 2},
+			{UserID: "user-3", Score: 400, Rank: 3},
+			{UserID: "user-4", Score: 300, Rank: 4},
+			{UserID: "user-5", Score: 200, Rank: 5},
+			{UserID: "user-6", Score: 150, Rank: 6},
+			{UserID: "user-7", Score: 100, Rank: 7},
+			{UserID: "user-8", Score: 50, Rank: 8},
+			{UserID: "user-9", Score: 25, Rank: 9},
+			{UserID: "user-10", Score: 10, Rank: 10},
+		}, int64(10), nil).
+		Times(1)
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1", "user-2", "user-3", "user-4", "user-5", "user-6", "user-7", "user-8", "user-9", "user-10"}).
+		Return(map[string]string{
+			"user-1": "alice", "user-2": "bob", "user-3": "carol", "user-4": "dave",
+			"user-5": "eve", "user-6": "frank", "user-7": "grace", "user-8": "henry",
+			"user-9": "ivy", "user-10": "jack",
 		}, nil).
+		Times(1)
+
+	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
+
+	logger := logger.New("info", false)
+	uc := NewLeaderboardUseCase(mockCacheRepo, mockPersistenceRepo, mockUserRepo, mockBroadcastService, logger)
+
+	// ── Act ─────────────────────────────────────────────────────────────
+	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
+
+	// ── Assert ──────────────────────────────────────────────────────────
+	require.NoError(t, err)
+	require.Len(t, entries, 10)
+	require.Equal(t, int64(10), total)
+	require.Equal(t, "alice", entries[0].Username)
+	require.Equal(t, "bob", entries[1].Username)
+}
+
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHit_ShouldUseCacheRegardlessOfLimit(t *testing.T) {
+	// ── Arrange ────────────────────────────────────────────────────────
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	// Cache has data - should use cache regardless of requested limit
+	mockCacheRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Score: 1000, Rank: 1},
+			{UserID: "user-2", Score: 500, Rank: 2},
+		}, int64(2), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
@@ -62,10 +109,12 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 	defer ctrl.Finish()
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	// Cache miss (empty, no error) - should load MaxBroadcastRank and backfill
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(2), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
 		Times(1)
+	// Backfill all loaded entries (up to MaxBroadcastRank)
 	mockCacheRepo.EXPECT().
 		UpdateScore(ctx, "user-1", int64(1000)).
 		Return(nil).
@@ -80,16 +129,23 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	// Load up to MaxBroadcastRank (1000) entries
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
+		GetLeaderboard(ctx, int64(domain.MaxBroadcastRank), int64(0)).
 		Return([]domain.LeaderboardEntry{
 			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
 			{UserID: "user-2", Username: "bob", Score: 500, Rank: 2},
 			{UserID: "user-3", Username: "carol", Score: 250, Rank: 3},
-		}, nil).
+		}, int64(3), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	// Only enrich the requested page (2 entries), not all loaded entries
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1", "user-2"}).
+		Return(map[string]string{"user-1": "alice", "user-2": "bob"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -106,7 +162,7 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadFromPersisten
 	require.Equal(t, "user-2", entries[1].UserID)
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturnError(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheError_ShouldUsePersistenceDirectly(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -114,12 +170,26 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturn
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), errors.New("redis error")).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("redis error")).
 		Times(1)
+	// Cache error - should NOT backfill cache (cache is broken)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	// Use persistence directly with requested limit (not MaxBroadcastRank)
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+		}, int64(1), nil).
+		Times(1)
+
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1"}).
+		Return(map[string]string{"user-1": "alice"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -129,13 +199,13 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenGetTotalPlayersFails_ShouldReturn
 	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.Error(t, err)
-	require.Nil(t, entries)
-	require.Equal(t, int64(0), total)
-	require.Contains(t, err.Error(), "redis error")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", entries[0].Username)
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_ShouldReturnError(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheError_ShouldUsePersistenceDirectlyWithoutBackfill(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -143,16 +213,26 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_Should
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(2), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return(nil, int64(0), errors.New("redis error")).
 		Times(1)
-	mockCacheRepo.EXPECT().
-		GetTopPlayers(ctx, int64(10), int64(0)).
-		Return(nil, errors.New("redis error")).
-		Times(1)
+	// Cache error - should NOT backfill cache (cache is broken)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	// Use persistence directly with requested limit
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+		}, int64(1), nil).
+		Times(1)
+
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1"}).
+		Return(map[string]string{"user-1": "alice"}, nil).
+		Times(1)
+
 	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
 
 	logger := logger.New("info", false)
@@ -162,12 +242,13 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheHitGetTopPlayersFails_Should
 	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
 
 	// ── Assert ──────────────────────────────────────────────────────────
-	require.Error(t, err)
-	require.Nil(t, entries)
-	require.Equal(t, int64(0), total)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", entries[0].Username)
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_ShouldReturnError(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissAndPersistenceFails_ShouldReturnError(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -175,14 +256,15 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_Shou
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
 		Times(1)
+	// Cache miss (empty) - would try to load MaxBroadcastRank entries
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
-		Return(nil, errors.New("database error")).
+		GetLeaderboard(ctx, int64(domain.MaxBroadcastRank), int64(0)).
+		Return(nil, int64(0), errors.New("database error")).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)
@@ -201,7 +283,7 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissGetLeaderboardFails_Shou
 	require.Contains(t, err.Error(), "database error")
 }
 
-func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissEmpty_ShouldReturnEmpty(t *testing.T) {
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMiss_ShouldLoadMaxBroadcastRankAndBackfill(t *testing.T) {
 	// ── Arrange ────────────────────────────────────────────────────────
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -209,14 +291,75 @@ func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissEmpty_ShouldReturnEmpty(
 
 	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
 	mockCacheRepo.EXPECT().
-		GetTotalPlayers(ctx).
-		Return(int64(0), nil).
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
+		Times(1)
+	// Backfill all loaded entries (up to MaxBroadcastRank)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-1", int64(1000)).
+		Return(nil).
+		Times(1)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-2", int64(500)).
+		Return(nil).
+		Times(1)
+	mockCacheRepo.EXPECT().
+		UpdateScore(ctx, "user-3", int64(250)).
+		Return(nil).
 		Times(1)
 
 	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	// Load up to MaxBroadcastRank entries
 	mockPersistenceRepo.EXPECT().
-		GetLeaderboard(ctx).
-		Return([]domain.LeaderboardEntry{}, nil).
+		GetLeaderboard(ctx, int64(domain.MaxBroadcastRank), int64(0)).
+		Return([]domain.LeaderboardEntry{
+			{UserID: "user-1", Username: "alice", Score: 1000, Rank: 1},
+			{UserID: "user-2", Username: "bob", Score: 500, Rank: 2},
+			{UserID: "user-3", Username: "carol", Score: 250, Rank: 3},
+		}, int64(3), nil).
+		Times(1)
+
+	mockUserRepo := mocks.NewMockUserRepository(ctrl)
+	mockUserRepo.EXPECT().
+		GetByIDs(ctx, []string{"user-1", "user-2", "user-3"}).
+		Return(map[string]string{"user-1": "alice", "user-2": "bob", "user-3": "carol"}, nil).
+		Times(1)
+
+	mockBroadcastService := mocks.NewMockBroadcastService(ctrl)
+
+	logger := logger.New("info", false)
+	uc := NewLeaderboardUseCase(mockCacheRepo, mockPersistenceRepo, mockUserRepo, mockBroadcastService, logger)
+
+	// ── Act ─────────────────────────────────────────────────────────────
+	entries, total, err := uc.GetLeaderboard(ctx, 10, 0)
+
+	// ── Assert ──────────────────────────────────────────────────────────
+	require.NoError(t, err)
+	// Should return requested page (first 10 entries, but only 3 available)
+	require.Len(t, entries, 3)
+	require.Equal(t, int64(3), total)
+	require.Equal(t, "alice", entries[0].Username)
+	require.Equal(t, "bob", entries[1].Username)
+	require.Equal(t, "carol", entries[2].Username)
+}
+
+func TestLeaderboardUseCase_GetLeaderboard_WhenCacheMissAndPersistenceEmpty_ShouldReturnEmpty(t *testing.T) {
+	// ── Arrange ────────────────────────────────────────────────────────
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockCacheRepo := mocks.NewMockLeaderboardCacheRepository(ctrl)
+	mockCacheRepo.EXPECT().
+		GetLeaderboard(ctx, int64(10), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
+		Times(1)
+	// No backfill needed - persistence is empty
+
+	mockPersistenceRepo := mocks.NewMockLeaderboardPersistenceRepository(ctrl)
+	mockPersistenceRepo.EXPECT().
+		GetLeaderboard(ctx, int64(domain.MaxBroadcastRank), int64(0)).
+		Return([]domain.LeaderboardEntry{}, int64(0), nil).
 		Times(1)
 
 	mockUserRepo := mocks.NewMockUserRepository(ctrl)

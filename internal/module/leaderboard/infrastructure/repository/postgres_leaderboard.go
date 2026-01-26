@@ -46,38 +46,40 @@ func (r *PostgresLeaderboardRepository) UpsertScore(ctx context.Context, userID 
 	return nil
 }
 
-// GetLeaderboard retrieves the full leaderboard from PostgreSQL with usernames
-// Used for syncing data to Redis when Redis is empty
-func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context) ([]domain.LeaderboardEntry, error) {
+// GetLeaderboard retrieves a paginated leaderboard from PostgreSQL with usernames and total count
+func (r *PostgresLeaderboardRepository) GetLeaderboard(ctx context.Context, limit, offset int64) ([]domain.LeaderboardEntry, int64, error) {
 	query := `
 		SELECT 
 			l.user_id,
 			u.username,
 			l.score,
-			ROW_NUMBER() OVER (ORDER BY l.score DESC) as rank
+			ROW_NUMBER() OVER (ORDER BY l.score DESC) as rank,
+			COUNT(*) OVER() as total
 		FROM leaderboard l
 		JOIN users u ON l.user_id = u.id
 		ORDER BY l.score DESC
+		LIMIT $1 OFFSET $2
 	`
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.pool.Query(ctx, query, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
+		return nil, 0, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 	defer rows.Close()
 
 	var entries []domain.LeaderboardEntry
+	var total int64
 	for rows.Next() {
 		var entry domain.LeaderboardEntry
-		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Score, &entry.Rank); err != nil {
-			return nil, fmt.Errorf("failed to scan leaderboard entry: %w", err)
+		if err := rows.Scan(&entry.UserID, &entry.Username, &entry.Score, &entry.Rank, &total); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan leaderboard entry: %w", err)
 		}
 		entries = append(entries, entry)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating leaderboard entries: %w", err)
+		return nil, 0, fmt.Errorf("error iterating leaderboard entries: %w", err)
 	}
 
-	return entries, nil
+	return entries, total, nil
 }
